@@ -6,11 +6,13 @@ import helmet from "helmet";
 import morgan from "morgan";
 import hpp from "hpp";
 import rateLimit from "express-rate-limit";
+import connectDB from "./database/db.js"
 
 // Load environment variables
 dotenv.config();
 
 // Connect to database
+await connectDB();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,6 +40,7 @@ if (process.env.NODE_ENV === "development") {
 app.use(express.json({ limit: "10kb" })); // Body limit is 10kb
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(cookieParser());
+
 
 // CORS Configuration
 app.use(
