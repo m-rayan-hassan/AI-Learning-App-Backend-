@@ -1,11 +1,10 @@
-// models/User.js
 import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
   username: {
     type: String,
     required: true,
-    // Not unique based on your requirement
+    // Not unique as per your request
   },
   email: {
     type: String,
@@ -14,17 +13,18 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    // Not required because Google users won't provide one
+    required: function() { return !this.googleId; } // Required if not logging in via Google
   },
   profileImage: {
     type: String,
-    default: "https://via.placeholder.com/150"
+    default: "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png"
   },
-  authSource: {
+  googleId: {
     type: String,
-    enum: ['local', 'google'],
-    default: 'local'
-  }
+  },
+  resetPasswordToken: String,
+  resetPasswordExpire: Date,
 }, { timestamps: true });
 
-export default mongoose.model('User', userSchema);
+const User = mongoose.model('User', userSchema);
+export default User;

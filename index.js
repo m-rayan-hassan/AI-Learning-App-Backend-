@@ -7,6 +7,7 @@ import morgan from "morgan";
 import hpp from "hpp";
 import rateLimit from "express-rate-limit";
 import connectDB from "./database/db.js"
+import authRoutes from "./routes/auth.routes.js"
 
 // Load environment variables
 dotenv.config();
@@ -61,7 +62,7 @@ app.use(
 );
 
 // API Routes
-
+app.use('/api/auth', authRoutes); 
 
 // 404 Handler
 app.use((req, res) => {
