@@ -20,9 +20,23 @@ const documentSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    originalUrl: {
+      type: String,
+    },
+    pdfUrl: {
+      type: String,
+    },
+    fileType: {
+      type: String,
+      required: true,
+    },
     fileSize: {
       type: Number,
       required: true,
+    },
+    summary: {
+      type: String,
+      default: ""
     },
     extractedText: {
       type: String,
@@ -32,15 +46,12 @@ const documentSchema = new mongoose.Schema(
       {
         content: {
           type: String,
-          required: true,
         },
         pageNumber: {
           type: Number,
-          default: 0,
         },
         chunkIndex: {
           type: Number,
-          required: true,
         },
       },
     ],

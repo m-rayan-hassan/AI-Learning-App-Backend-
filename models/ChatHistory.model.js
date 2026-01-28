@@ -27,10 +27,6 @@ const chatHistorySchema = new mongoose.Schema(
           type: Date,
           default: Date.now,
         },
-        relevantChunks: {
-          type: [Number],
-          default: [],
-        },
       },
     ],
   },

@@ -6,8 +6,11 @@ import helmet from "helmet";
 import morgan from "morgan";
 import hpp from "hpp";
 import rateLimit from "express-rate-limit";
-import connectDB from "./database/db.js"
-import authRoutes from "./routes/auth.routes.js"
+import connectDB from "./database/db.js";
+import authRoutes from "./routes/auth.routes.js";
+import documentRoutes from "./routes/document.routes.js";
+import aiRoutes from "./routes/ai.routes.js";
+import flashcardRoutes from "./routes/flashcard.routes.js";
 
 // Load environment variables
 dotenv.config();
@@ -42,7 +45,6 @@ app.use(express.json({ limit: "10kb" })); // Body limit is 10kb
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(cookieParser());
 
-
 // CORS Configuration
 app.use(
   cors({
@@ -58,11 +60,14 @@ app.use(
       "Origin",
       "Accept",
     ],
-  })
+  }),
 );
 
 // API Routes
-app.use('/api/auth', authRoutes); 
+app.use("/api/auth", authRoutes);
+app.use("/api/documents", documentRoutes);
+app.use("/api/flashcards", flashcardRoutes);
+app.use("/api/ai", aiRoutes);
 
 // 404 Handler
 app.use((req, res) => {
@@ -85,6 +90,6 @@ app.use((err, req, res, next) => {
 // Start server
 app.listen(PORT, () => {
   console.log(
-    ` Server running on port ${PORT} in ${process.env.NODE_ENV} mode`
+    ` Server running on port ${PORT} in ${process.env.NODE_ENV} mode`,
   );
 });
