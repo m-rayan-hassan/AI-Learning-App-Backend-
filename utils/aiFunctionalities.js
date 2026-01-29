@@ -137,7 +137,7 @@ export const generateFlashcards = async (url, count = 10) => {
       }
 
       if (question && answer) {
-        flashcards.push([question, answer, difficulty]);
+        flashcards.push({question, answer, difficulty});
       }
     }
 

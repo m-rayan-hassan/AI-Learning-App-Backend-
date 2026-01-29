@@ -11,7 +11,7 @@ import authRoutes from "./routes/auth.routes.js";
 import documentRoutes from "./routes/document.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import flashcardRoutes from "./routes/flashcard.routes.js";
-
+import quizRoutes from "./routes/quiz.routes.js";
 // Load environment variables
 dotenv.config();
 
@@ -68,6 +68,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/flashcards", flashcardRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/quizzes", quizRoutes);
 
 // 404 Handler
 app.use((req, res) => {

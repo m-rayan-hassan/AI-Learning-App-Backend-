@@ -41,10 +41,11 @@ export const generateFlashcards = async (req, res, next) => {
 
     console.log("Cards generated", cards);
     
+    
     const flashcardSet = await Flashcard.create({
       userId: req.user._id,
       documentId: document._id,
-      cards: cards.map((card) => ({
+      cards: cards.map(card => ({
         question: card.question,
         answer: card.answer,
         difficulty: card.difficulty,
@@ -211,7 +212,7 @@ export const chat = async (req, res, next) => {
         timestamp: new Date(),
       },
       {
-        role: "assisstant",
+        role: "assistant",
         content: answer,
         timestamp: new Date(),
       },
@@ -279,7 +280,7 @@ export const explainConcept = async (req, res, next) => {
 
 export const chatHistory = async (req, res, next) => {
   try {
-    const { documentId } = req.body;
+    const { documentId } = req.params;
 
     if (!documentId) {
       return res.status(400).json({

@@ -1,9 +1,9 @@
 import Flashcard from "../models/Flashcard.model.js";
 
 export const getFlashcards = async (req, res, next) => {
-  try {
+  try {  
     const flashcards = await Flashcard.find({
-      userId: req.user_id,
+      userId: req.user._id,
       documentId: req.params.documentId,
     })
       .populate("documentId", "title fileName")
@@ -21,7 +21,7 @@ export const getFlashcards = async (req, res, next) => {
 
 export const getAllFlashcardSets = async (req, res, next) => {
   try {
-    const flashcardSets = await Flashcard.find({ userId: req.user_id })
+    const flashcardSets = await Flashcard.find({ userId: req.user._id })
       .populate("documentId", "title")
       .sort({ createdAt: -1 });
 
@@ -37,20 +37,20 @@ export const getAllFlashcardSets = async (req, res, next) => {
 
 export const reviewFlashcard = async (req, res, next) => {
   try {
-    const flashcardSet = await Flashcard.find({
-      "card._id": req.params.cardId,
+    const flashcardSet = await Flashcard.findOne({
+      "cards._id": req.params.cardId,
       userId: req.user._id,
     });
 
     if (!flashcardSet) {
       return res.status(404).json({
         success: false,
-        error: "Flashcard set or card nmo found",
+        error: "Flashcard set or card not found",
         statusCode: 404,
       });
     }
     const cardIndex = flashcardSet.cards.findIndex(
-      (card) => card_id.toString() === req.params.cardId,
+      (card) => card._id.toString() === req.params.cardId,
     );
 
     if (cardIndex === -1) {
@@ -78,8 +78,8 @@ export const reviewFlashcard = async (req, res, next) => {
 
 export const toggleFlashcard = async (req, res, next) => {
   try {
-    const flashcardSet = await Flashcard.find({
-      "card._id": req.params.cardId,
+    const flashcardSet = await Flashcard.findOne({
+      "cards._id": req.params.cardId,
       userId: req.user._id,
     });
 
@@ -91,7 +91,7 @@ export const toggleFlashcard = async (req, res, next) => {
       });
     }
     const cardIndex = flashcardSet.cards.findIndex(
-      (card) => card_id.toString() === req.params.cardId,
+      (card) => card._id.toString() === req.params.cardId,
     );
 
     if (cardIndex === -1) {
