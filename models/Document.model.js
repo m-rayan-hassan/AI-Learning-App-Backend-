@@ -26,6 +26,14 @@ const documentSchema = new mongoose.Schema(
     pdfUrl: {
       type: String,
     },
+    originalFilePublicId: {
+      type: String,
+      required: true,
+    },
+    pdfFilePublicId: {
+      type: String,
+      required: true,
+    },
     fileType: {
       type: String,
       required: true,
@@ -36,25 +44,18 @@ const documentSchema = new mongoose.Schema(
     },
     summary: {
       type: String,
-      default: ""
+      default: "",
     },
     extractedText: {
       type: String,
       default: "",
     },
-    chunks: [
-      {
-        content: {
-          type: String,
-        },
-        pageNumber: {
-          type: Number,
-        },
-        chunkIndex: {
-          type: Number,
-        },
-      },
-    ],
+    voiceOveviewUrl: {
+      type: String,
+    },
+    podcastUrl: {
+      type: String,
+    },
     uploadDate: {
       type: Date,
       default: Date.now,

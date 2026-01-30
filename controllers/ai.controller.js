@@ -3,6 +3,11 @@ import Flashcard from "../models/Flashcard.model.js";
 import Quiz from "../models/Quiz.model.js";
 import ChatHistory from "../models/ChatHistory.model.js";
 import * as aiFunctionalities from "../utils/aiFunctionalities.js";
+import * as voiceFunctionalities from "../utils/voiceFunctionalities.js";
+import { uploadMedia } from "../config/cloudinary.js";
+import fs from "fs/promises";
+import path from "path";
+import { url } from "inspector";
 
 export const generateFlashcards = async (req, res, next) => {
   try {
@@ -16,7 +21,7 @@ export const generateFlashcards = async (req, res, next) => {
       });
     }
     console.log("User ID: ", req.user._id);
-    
+
     const document = await Document.findOne({
       _id: documentId,
       userId: req.user._id,
@@ -33,19 +38,18 @@ export const generateFlashcards = async (req, res, next) => {
 
     const documentUrl = document.pdfUrl;
     console.log("URL: ", documentUrl);
-    
+
     const cards = await aiFunctionalities.generateFlashcards(
       documentUrl,
       parseInt(count),
     );
 
     console.log("Cards generated", cards);
-    
-    
+
     const flashcardSet = await Flashcard.create({
       userId: req.user._id,
       documentId: document._id,
-      cards: cards.map(card => ({
+      cards: cards.map((card) => ({
         question: card.question,
         answer: card.answer,
         difficulty: card.difficulty,
@@ -307,6 +311,126 @@ export const chatHistory = async (req, res, next) => {
       success: true,
       data: chatHistory,
       message: "Chat history retrieved successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const generateVoiceOverview = async (req, res, next) => {
+  try {
+    const { documentId } = req.body;
+
+    if (!documentId) {
+      return res.status(400).json({
+        success: false,
+        error: "Please provide documentId",
+        statusCode: 400,
+      });
+    }
+
+    const document = await Document.findOne({
+      _id: documentId,
+      userId: req.user._id,
+      status: "ready",
+    });
+
+    if (!document) {
+      return res.staus(404).json({
+        success: false,
+        error: "Document not found or not ready",
+        statusCode: 404,
+      });
+    }
+
+    const documentUrl = document.pdfUrl;
+
+    const voiceScript =
+      await aiFunctionalities.generateVoiceOverviewScript(documentUrl);
+
+    const voiceOverviewFilePath =
+      await voiceFunctionalities.generateVoice(voiceScript);
+
+    const voiceOverview = await uploadMedia(
+      voiceOverviewFilePath,
+      "ai-learning-app/voice-overview",
+    );
+
+    const voiceOverviewUrl = voiceOverview.secure_url;
+
+    await fs.unlink(path.resolve(voiceOverviewFilePath));
+
+    document.voiceOveviewUrl = voiceOverviewUrl;
+
+    await document.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Voice overview generated successfully",
+      voice_url: voiceOverviewUrl,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const generatePodcast = async (req, res, next) => {
+  try {
+    const { documentId } = req.body;
+
+    if (!documentId) {
+      return res.status(400).json({
+        success: false,
+        error: "Please provide documentId",
+        statusCode: 400,
+      });
+    }
+
+    const document = await Document.findOne({
+      _id: documentId,
+      userId: req.user._id,
+      status: "ready",
+    });
+
+    if (!document) {
+      return res.staus(404).json({
+        success: false,
+        error: "Document not found or not ready",
+        statusCode: 404,
+      });
+    }
+
+    const documentUrl = document.pdfUrl;
+
+    const voice_id1 = "JBFqnCBsd6RMkjVDRZzb",
+      voice_id2 = "21m00Tcm4TlvDq8ikWAM";
+
+    const podcastScript = await aiFunctionalities.generatePodcast(
+      documentUrl,
+      voice_id1,
+      voice_id2,
+    );
+
+    const podcastFilePath =
+      await voiceFunctionalities.generatePodcast(podcastScript);
+
+    const podcast = await uploadMedia(
+      podcastFilePath,
+      "ai-learning-app/podcast",
+    );
+
+    const podcastUrl = podcast.secure_url;
+
+    await fs.unlink(path.resolve(podcastFilePath));
+
+    document.podcastUrl = podcastUrl;
+
+    await document.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Podcast generated successfully",
+      podcast_url: podcastUrl,
     });
   } catch (error) {
     next(error);

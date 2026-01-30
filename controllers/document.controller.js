@@ -1,5 +1,5 @@
 import Document from "../models/Document.model.js";
-import cloudinary from "../config/cloudinary.js";
+import { uploadMedia } from "../config/cloudinary.js";
 import { convertToPdf } from "../utils/converter.js";
 import fs from "fs";
 import path from "path";
@@ -38,32 +38,19 @@ export const uploadDocument = async (req, res) => {
 
     // Upload Original File to Cloudinary
     console.log(`Uploading original file to Cloudinary...`);
-    const originalUpload = await cloudinary.uploader.upload(filePath, {
-      resource_type: "auto",
-      folder: "documents/original",
-    });
+    const originalUpload = await uploadMedia(filePath, "ai-learning-app/documents/original");
 
     // Upload PDF to Cloudinary (if converted, or if it was already PDF)
     // If it was already PDF, originalUpload is the PDF upload.
     let pdfUrl = originalUpload.secure_url;
-
+    let pdfFilePublicId = "";
     if (isConverted) {
       console.log(`Uploading converted PDF to Cloudinary...`);
-      const pdfUpload = await cloudinary.uploader.upload(pdfPath, {
-        // CHANGE THIS: 'auto' detects it is a PDF and treats it correctly
-        resource_type: "auto",
-
-        folder: "documents/pdf",
-
-        // You can typically remove 'format: "pdf"' if the file has an extension,
-        // but keeping it is fine.
-
-        // This will now actually work and return the page count in the response
-        pages: true,
-      });
+      const pdfUpload = await uploadMedia(pdfPath, "ai-learning-app/documents/pdf");
 
       // IMPORTANT: Ensure you use .secure_url, not .url (for HTTPS)
       pdfUrl = pdfUpload.secure_url;
+      pdfFilePublicId = pdfUpload.public_id;
       console.log("PDF URL: ", pdfUrl);
     }
 
@@ -86,6 +73,8 @@ export const uploadDocument = async (req, res) => {
       fileType: mimeType,
       originalUrl: originalUpload.secure_url,
       pdfUrl: pdfUrl,
+      originalFilePublicId: originalUpload.public_id,
+      pdfFilePublicId: pdfFilePublicId,
       status: "ready",
     });
 
