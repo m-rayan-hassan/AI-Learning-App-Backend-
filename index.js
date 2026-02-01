@@ -12,6 +12,8 @@ import documentRoutes from "./routes/document.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import flashcardRoutes from "./routes/flashcard.routes.js";
 import quizRoutes from "./routes/quiz.routes.js";
+import progressRoutes from "./routes/progress.routes.js"
+
 // Load environment variables
 dotenv.config();
 
@@ -48,7 +50,7 @@ app.use(cookieParser());
 // CORS Configuration
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: process.env.CLIENT_URL || "http://localhost:3000",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
     allowedHeaders: [
@@ -69,7 +71,7 @@ app.use("/api/documents", documentRoutes);
 app.use("/api/flashcards", flashcardRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/quizzes", quizRoutes);
-
+app.use("/api/progress", progressRoutes)
 // 404 Handler
 app.use((req, res) => {
   res.status(404).json({

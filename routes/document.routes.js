@@ -1,9 +1,8 @@
 import express from "express";
 import {
   uploadDocument,
-  getDocumentContent,
   getDocuments,
-  getDocumentById,
+  getDocument,
   deleteDocument,
   updateDocument,
 } from "../controllers/document.controller.js";
@@ -16,8 +15,7 @@ router.use(protect);
 
 router.post("/upload", upload.single("file"), uploadDocument);
 router.get("/", getDocuments);
-router.get("/:id", getDocumentById);
-router.get("/:id/content", getDocumentContent);
+router.get("/:id", getDocument);
 router.put("/:id", updateDocument);
 router.delete("/:id", deleteDocument);
 
