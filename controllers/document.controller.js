@@ -50,7 +50,7 @@ export const uploadDocument = async (req, res) => {
     // If it was already PDF, originalUpload is the PDF upload.
     let pdfUrl = originalUpload.secure_url;
     let pdfFilePublicId = "";
-    if (isConverted) {
+    
       console.log(`Uploading converted PDF to Cloudinary...`);
       const pdfUpload = await uploadMedia(
         pdfPath,
@@ -60,8 +60,10 @@ export const uploadDocument = async (req, res) => {
       // IMPORTANT: Ensure you use .secure_url, not .url (for HTTPS)
       pdfUrl = pdfUpload.secure_url;
       pdfFilePublicId = pdfUpload.public_id;
+      console.log("PDF Public id", pdfFilePublicId);
+      
       console.log("PDF URL: ", pdfUrl);
-    }
+    
 
     // cleanup local files
     try {
