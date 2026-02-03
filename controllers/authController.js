@@ -1,10 +1,10 @@
-import User from '../models/User.model.js';
-import generateToken from '../utils/generateToken.js';
-import sendEmail from '../utils/sendEmail.js';
-import bcrypt from 'bcryptjs';
-import Joi from 'joi';
-import { OAuth2Client } from 'google-auth-library';
-import crypto from 'crypto';
+import User from "../models/User.model.js";
+import generateToken from "../utils/generateToken.js";
+import sendEmail from "../utils/sendEmail.js";
+import bcrypt from "bcryptjs";
+import Joi from "joi";
+import { OAuth2Client } from "google-auth-library";
+import crypto from "crypto";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -29,7 +29,8 @@ export const registerUser = async (req, res) => {
 
   try {
     const userExists = await User.findOne({ email });
-    if (userExists) return res.status(400).json({ message: 'User already exists' });
+    if (userExists)
+      return res.status(400).json({ message: "User already exists" });
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
@@ -70,7 +71,7 @@ export const loginUser = async (req, res) => {
         token: generateToken(user._id),
       });
     } else {
-      res.status(401).json({ message: 'Invalid email or password' });
+      res.status(401).json({ message: "Invalid email or password" });
     }
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -82,32 +83,54 @@ export const googleLogin = async (req, res) => {
   const { token } = req.body; // Token from frontend
 
   try {
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-    
-    const { name, email, picture, sub } = ticket.getPayload();
+    // Support either an ID token (id_token) or an access token (access_token)
+    let name, email, picture, sub;
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken: token,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      const payload = ticket.getPayload() || {};
+      name = payload.name;
+      email = payload.email;
+      picture = payload.picture;
+      sub = payload.sub;
+    } catch (verifyErr) {
+      // Fallback: token might be an access_token, fetch userinfo
+      try {
+        const resp = await fetch(
+          `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${token}`,
+        );
+        if (!resp.ok) throw new Error("Failed to fetch Google userinfo");
+        const info = await resp.json();
+        name = info.name;
+        email = info.email;
+        picture = info.picture;
+        sub = info.sub || info.user_id;
+      } catch (userinfoErr) {
+        throw verifyErr;
+      }
+    }
 
     let user = await User.findOne({ email });
 
     if (user) {
-        // If user exists but logic handled differently (e.g. update googleId)
-        if (!user.googleId) {
-            user.googleId = sub;
-            user.profileImage = picture || user.profileImage;
-            await user.save();
-        }
+      // If user exists but logic handled differently (e.g. update googleId)
+      if (!user.googleId) {
+        user.googleId = sub;
+        user.profileImage = picture || user.profileImage;
+        await user.save();
+      }
     } else {
-        // Create new user via Google
-        // Note: Password is set to a dummy secret or handled by schema validation skipping
-        user = await User.create({
-            username: name,
-            email,
-            profileImage: picture,
-            googleId: sub,
-            password: crypto.randomBytes(16).toString('hex') // Random password for security
-        });
+      // Create new user via Google
+      // Note: Password is set to a dummy secret or handled by schema validation skipping
+      user = await User.create({
+        username: name,
+        email,
+        profileImage: picture,
+        googleId: sub,
+        password: crypto.randomBytes(16).toString("hex"), // Random password for security
+      });
     }
 
     res.json({
@@ -117,9 +140,10 @@ export const googleLogin = async (req, res) => {
       profileImage: user.profileImage,
       token: generateToken(user._id),
     });
-
   } catch (err) {
-    res.status(500).json({ message: 'Google authentication failed', error: err.message });
+    res
+      .status(500)
+      .json({ message: "Google authentication failed", error: err.message });
   }
 };
 
@@ -129,13 +153,16 @@ export const forgotPassword = async (req, res) => {
 
   try {
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     // Generate token
-    const resetToken = crypto.randomBytes(20).toString('hex');
-    
+    const resetToken = crypto.randomBytes(20).toString("hex");
+
     // Hash token and save to DB
-    user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    user.resetPasswordToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
     user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 Minutes
 
     await user.save();
@@ -146,17 +173,16 @@ export const forgotPassword = async (req, res) => {
     try {
       await sendEmail({
         email: user.email,
-        subject: 'Password Reset Request',
+        subject: "Password Reset Request",
         message,
       });
-      res.status(200).json({ success: true, data: 'Email sent' });
+      res.status(200).json({ success: true, data: "Email sent" });
     } catch (err) {
       user.resetPasswordToken = undefined;
       user.resetPasswordExpire = undefined;
       await user.save();
-      return res.status(500).json({ message: 'Email could not be sent' });
+      return res.status(500).json({ message: "Email could not be sent" });
     }
-
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -164,7 +190,10 @@ export const forgotPassword = async (req, res) => {
 
 // @desc    Reset Password
 export const resetPassword = async (req, res) => {
-  const resetPasswordToken = crypto.createHash('sha256').update(req.params.resetToken).digest('hex');
+  const resetPasswordToken = crypto
+    .createHash("sha256")
+    .update(req.params.resetToken)
+    .digest("hex");
 
   try {
     const user = await User.findOne({
@@ -172,7 +201,7 @@ export const resetPassword = async (req, res) => {
       resetPasswordExpire: { $gt: Date.now() },
     });
 
-    if (!user) return res.status(400).json({ message: 'Invalid Token' });
+    if (!user) return res.status(400).json({ message: "Invalid Token" });
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(req.body.password, salt);
@@ -181,7 +210,7 @@ export const resetPassword = async (req, res) => {
 
     await user.save();
 
-    res.status(200).json({ success: true, data: 'Password updated success' });
+    res.status(200).json({ success: true, data: "Password updated success" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -189,16 +218,16 @@ export const resetPassword = async (req, res) => {
 
 // @desc    Delete User
 export const deleteUser = async (req, res) => {
-    try {
-        const user = await User.findById(req.user._id);
-        
-        if(user) {
-            await User.deleteOne({ _id: user._id });
-            res.json({ message: "User removed" });
-        } else {
-            res.status(404).json({ message: "User not found" });
-        }
-    } catch (err) {
-        res.status(500).json({ message: err.message });
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (user) {
+      await User.deleteOne({ _id: user._id });
+      res.json({ message: "User removed" });
+    } else {
+      res.status(404).json({ message: "User not found" });
     }
-}
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};

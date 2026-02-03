@@ -6,6 +6,8 @@ import { convertToPdf } from "../utils/converter.js";
 import fs from "fs";
 import mongoose from "mongoose";
 import { deleteMedia } from "../config/cloudinary.js";
+import { getFileInfo } from "../utils/getFileInfo.js";
+import * as aiFunctionalities from "../utils/aiFunctionalities.js"
 
 // Upload Document Controller
 export const uploadDocument = async (req, res) => {
@@ -39,6 +41,16 @@ export const uploadDocument = async (req, res) => {
       }
     }
 
+    const filePages = await getFileInfo(pdfPath);
+
+    if (filePages > 500) {
+      return res.status(400).json({
+        success: false,
+        message: "Document with pages greater than 500 can not be uploaded",
+        statusCode: 400,
+      });
+    }
+
     // Upload Original File to Cloudinary
     console.log(`Uploading original file to Cloudinary...`);
     const originalUpload = await uploadMedia(
@@ -50,20 +62,19 @@ export const uploadDocument = async (req, res) => {
     // If it was already PDF, originalUpload is the PDF upload.
     let pdfUrl = originalUpload.secure_url;
     let pdfFilePublicId = "";
-    
-      console.log(`Uploading converted PDF to Cloudinary...`);
-      const pdfUpload = await uploadMedia(
-        pdfPath,
-        "ai-learning-app/documents/pdf",
-      );
 
-      // IMPORTANT: Ensure you use .secure_url, not .url (for HTTPS)
-      pdfUrl = pdfUpload.secure_url;
-      pdfFilePublicId = pdfUpload.public_id;
-      console.log("PDF Public id", pdfFilePublicId);
-      
-      console.log("PDF URL: ", pdfUrl);
-    
+    console.log(`Uploading converted PDF to Cloudinary...`);
+    const pdfUpload = await uploadMedia(
+      pdfPath,
+      "ai-learning-app/documents/pdf",
+    );
+
+    // IMPORTANT: Ensure you use .secure_url, not .url (for HTTPS)
+    pdfUrl = pdfUpload.secure_url;
+    pdfFilePublicId = pdfUpload.public_id;
+    console.log("PDF Public id", pdfFilePublicId);
+
+    console.log("PDF URL: ", pdfUrl);
 
     // cleanup local files
     try {
@@ -74,6 +85,11 @@ export const uploadDocument = async (req, res) => {
       console.error("Cleanup error:", cleanupError);
     }
 
+    const getExtractedContent = await aiFunctionalities.getExtractedContent(pdfUrl);
+
+    console.log("Extracted Text", getExtractedContent);
+    
+    
     // Save to Database
     const newDocument = new Document({
       userId,
@@ -81,6 +97,7 @@ export const uploadDocument = async (req, res) => {
       fileName: originalName,
       filePath: pdfUrl,
       fileSize: req.file.size,
+      extractedText: getExtractedContent,
       fileType: mimeType,
       originalUrl: originalUpload.secure_url,
       pdfUrl: pdfUrl,
@@ -167,19 +184,25 @@ export const getDocument = async (req, res, next) => {
   try {
     const document = await Document.findOne({
       _id: req.params.id,
-      userId: req.user._id
+      userId: req.user._id,
     });
 
     if (!document) {
       return res.status(404).json({
         success: false,
         error: "Document not found",
-        statusCode: 404
+        statusCode: 404,
       });
     }
 
-    const flashcardCount = await Flashcard.countDocuments({documentId: document._id, userId: req.user._id});
-    const quizCount = await Quiz.countDocuments({documents: document._id, userId: req.user._id});
+    const flashcardCount = await Flashcard.countDocuments({
+      documentId: document._id,
+      userId: req.user._id,
+    });
+    const quizCount = await Quiz.countDocuments({
+      documents: document._id,
+      userId: req.user._id,
+    });
 
     document.lastAccessed = Date.now();
     await document.save();
@@ -190,7 +213,7 @@ export const getDocument = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      data: documentData      
+      data: documentData,
     });
   } catch (error) {
     next(error);
@@ -237,20 +260,18 @@ export const updateDocument = async (req, res) => {
   }
 };
 
-
 export const deleteDocument = async (req, res, next) => {
   try {
-
     const document = await Document.findOne({
       _id: req.params.id,
-      userId: req.user._id
+      userId: req.user._id,
     });
 
     if (!document) {
       return res.status(404).json({
         success: false,
         message: "Document not found",
-        statusCode: 404
+        statusCode: 404,
       });
     }
 

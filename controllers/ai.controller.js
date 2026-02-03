@@ -7,7 +7,6 @@ import * as voiceFunctionalities from "../utils/voiceFunctionalities.js";
 import { uploadMedia } from "../config/cloudinary.js";
 import fs from "fs/promises";
 import path from "path";
-import { url } from "inspector";
 
 export const generateFlashcards = async (req, res, next) => {
   try {
@@ -36,11 +35,10 @@ export const generateFlashcards = async (req, res, next) => {
       });
     }
 
-    const documentUrl = document.pdfUrl;
-    console.log("URL: ", documentUrl);
+    const content = document.extractedText;
 
     const cards = await aiFunctionalities.generateFlashcards(
-      documentUrl,
+      content,
       parseInt(count),
     );
 
@@ -94,9 +92,9 @@ export const generateQuiz = async (req, res, next) => {
       });
     }
 
-    const documentUrl = document.pdfUrl;
+    const content = document.extractedText;
     const questions = await aiFunctionalities.generateQuiz(
-      documentUrl,
+      content,
       parseInt(numQuestions),
     );
 
@@ -144,8 +142,9 @@ export const generateSummary = async (req, res, next) => {
         statusCode: 404,
       });
     }
-    const documentUrl = document.pdfUrl;
-    const summary = await aiFunctionalities.generateSummary(documentUrl);
+
+    const content = document.extractedText;
+    const summary = await aiFunctionalities.generateSummary(content);
 
     // TODO:  save summary  to db
 
@@ -202,10 +201,10 @@ export const chat = async (req, res, next) => {
       });
     }
 
-    const documentUrl = document.pdfUrl;
+    const content = document.extractedText;
     const answer = await aiFunctionalities.chatWithContext(
       question,
-      documentUrl,
+      content,
       chatHistory.messages,
     );
 
@@ -263,10 +262,10 @@ export const explainConcept = async (req, res, next) => {
       });
     }
 
-    const documentUrl = document.pdfUrl;
+    const content = document.extractedText;
     const explaination = await aiFunctionalities.explainConcept(
       concept,
-      documentUrl,
+      content,
     );
 
     res.status(200).json({
@@ -343,10 +342,10 @@ export const generateVoiceOverview = async (req, res, next) => {
       });
     }
 
-    const documentUrl = document.pdfUrl;
+    const content = document.extractedText;
 
     const voiceScript =
-      await aiFunctionalities.generateVoiceOverviewScript(documentUrl);
+      await aiFunctionalities.generateVoiceOverviewScript(content);
 
     const voiceOverviewFilePath =
       await voiceFunctionalities.generateVoice(voiceScript);
@@ -400,13 +399,13 @@ export const generatePodcast = async (req, res, next) => {
       });
     }
 
-    const documentUrl = document.pdfUrl;
+    const content = document.extractedText;
 
     const voice_id1 = "JBFqnCBsd6RMkjVDRZzb",
       voice_id2 = "21m00Tcm4TlvDq8ikWAM";
 
     const podcastScript = await aiFunctionalities.generatePodcast(
-      documentUrl,
+      content,
       voice_id1,
       voice_id2,
     );

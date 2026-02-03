@@ -1,9 +1,9 @@
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 
-// Ensure uploads directory exists
-const uploadDir = 'uploads/';
+const uploadDir = "uploads/";
+
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -12,37 +12,61 @@ const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadDir);
   },
+
   filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+
+    cb(
+      null,
+      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname),
+    );
   },
 });
 
 const fileFilter = (req, file, cb) => {
-  // Accept doc, docx, ppt, pptx, pdf, txt, odt
-  const allowedTypes = [
-    'application/pdf',
-    'application/msword', // doc
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
-    'application/vnd.ms-powerpoint', // ppt
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation', // pptx
-    'text/plain', // txt
-    'application/vnd.oasis.opendocument.text', // odt
+  const allowedMimeTypes = [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "text/plain",
+    "application/vnd.oasis.opendocument.text",
   ];
 
-  if (allowedTypes.includes(file.mimetype)) {
+  const allowedExtensions = [
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".ppt",
+    ".pptx",
+    ".txt",
+    ".odt",
+  ];
+
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  if (
+    allowedMimeTypes.includes(file.mimetype) &&
+    allowedExtensions.includes(ext)
+  ) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type. Only PDF, DOC, DOCX, PPT, PPTX, TXT, ODT are allowed.'), false);
+    cb(
+      new Error(
+        "Invalid file type. Only PDF, DOC, DOCX, PPT, PPTX, TXT, ODT allowed.",
+      ),
+      false,
+    );
   }
 };
 
-const upload = multer({ 
-  storage: storage,
-  fileFilter: fileFilter,
+const upload = multer({
+  storage,
+  fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  }
+    fileSize: 50 * 1024 * 1024,
+  },
 });
 
 export default upload;

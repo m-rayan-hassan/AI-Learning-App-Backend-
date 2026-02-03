@@ -5,22 +5,69 @@ dotenv.config();
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-export const generateQuiz = async (url, numQuestions = 5) => {
-  const prompt = `Generate exactly ${numQuestions} multiple choice questions from the provided document.
-    Format each question as: 
-    Q: [Question]
-    O1: [Option 1]
-    O2: [Option 2]
-    O3: [Option 3]
-    O4: [Option 4]
-    C: [Correct option - exactly as above]
-    E: [Brief explaination]
-    D: [Difficulty: easy, medium, or hard]
-    
-    Seperate questions with ---`;
+export const getExtractedContent = async (url) => {
+  const prompt = `**System Role:** You are an Expert Content Reconstruction AI and Instructional Designer. Your goal is to transcode documents into a semantic, machine-readable format that preserves 100% of the educational value for downstream processing (quizzes, flashcards, scripts).
+
+**Input:** You will receive a document (PDF, image, or text) containing educational material.
+**Output:** You must generate a strictly formatted text response using the tags defined below.
+
+### 1. CRITICAL EXTRACTION RULES
+* **Lossless Content:** Do not summarize. Retain all definitions, dates, examples, and nuances. If a section is repetitive, merge it logically, but do not delete unique information.
+* **Visual Logic:** For every diagram, chart, or image, you must "transcode" the visual data into text. Imagine you are describing it to a blind student who needs to pass a physics exam based on your description alone.
+* **No Conversational Filler:** Do NOT output "Here is the breakdown" or "The document contains". Start immediately with [DOCUMENT_START].
+* **Latex & Code:** Keep mathematical formulas in LaTeX format. Keep code snippets in code blocks.
+
+### 2. STRICT OUTPUT STRUCTURE
+You must strictly adhere to this format. Do not create new tags.
+
+[DOCUMENT_START]
+
+[SECTION]
+Title: <Exact Section Title>
+Content:
+<Full, detailed content. If the text spans multiple paragraphs, keep them all.>
+
+[CONCEPT_BLOCK]
+<Use this for specific definitions, formulas, or laws that are critical for flashcards.>
+Term: <The concept name>
+Definition: <The precise definition>
+Context: <Example or additional context provided in text>
+
+[DIAGRAM]
+Title: <Title of the diagram>
+Visual Components: <List the objects, arrows, and layout structure>
+Educational Value: <Explain the process or relationship shown. Example: "This diagram illustrates the step-by-step flow of photosynthesis...">
+
+[CHART]
+Type: <Bar, Line, Pie, etc.>
+Title: <Chart Title>
+X-Axis: <Label and Unit>
+Y-Axis: <Label and Unit>
+Data Points:
+* <List key data points visible, e.g., "Year 2020: 50% increase">
+Trend Analysis: <Describe the direction (upward/downward) and implications>
+
+[TABLE]
+Title: <Table Title>
+Structure: <Describe columns, e.g., "Comparison between Mitosis and Meiosis">
+Row Data:
+* <Row 1 content>
+* <Row 2 content>
+Key Insight: <What comparison or data point is this table proving?>
+
+[IMPORTANT_NOTE]
+<Copy verbatim any text inside warning boxes, tips, or bolded "Remember" sections.>
+
+[DOCUMENT_END]
+
+### 3. QUALITY CHECKS
+* **Did you skip a diagram?** Go back and extract it.
+* **Is the text clean?** Remove headers, footers, and page numbers.
+* **Is it readable?** Ensure logical flow is maintained.
+
+**Begin processing the document now.**`;
 
   const pdfResp = await fetch(url).then((response) => response.arrayBuffer());
-
   const contents = [
     { text: prompt },
     {
@@ -35,6 +82,47 @@ export const generateQuiz = async (url, numQuestions = 5) => {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: contents,
+    });
+
+    return response.text;
+  } catch (error) {
+    console.error("Gemini API error", error);
+    throw new Error("Failed to generate quiz");
+  }
+};
+
+export const generateQuiz = async (content, numQuestions = 5) => {
+  const prompt = `**System Role:** You are an expert Assessment Specialist creating a high-quality exam for advanced learners.
+
+**Goal:** Generate exactly ${numQuestions} multiple-choice questions that test **critical thinking** and **concept application**, not just surface-level recall.
+
+**Question Design Rules:**
+1. **Plausible Distractors:** All wrong options (distractors) must be realistic and derived from common misconceptions in the text. Do NOT use obvious fillers like "None of the above" or silly answers.
+2. **No "All of the above":** Avoid "All of the above" or "A and B only" style options.
+3. **Application Focus:** Frame questions around scenarios or "why/how" logic rather than simple definitions.
+4. **Self-Contained:** The explanation (E) must clearly state *why* the correct answer is right AND *why* the distractors are wrong.
+
+**Output Format (STRICT):**
+You must strictly follow this format for every question. Separate questions with "---".
+
+Q: [The Question text]
+O1: [Option 1]
+O2: [Option 2]
+O3: [Option 3]
+O4: [Option 4]
+C: [The Correct Option Text (must match one of the above exactly)]
+E: [Explanation: Why is this correct? Why are others wrong?]
+D: [Difficulty: easy, medium, or hard]
+
+---
+
+**Input Content:**
+${content}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
     });
 
     const generatedText = response.text;
@@ -86,30 +174,33 @@ export const generateQuiz = async (url, numQuestions = 5) => {
   }
 };
 
-export const generateFlashcards = async (url, count = 10) => {
-  const prompt = `Generate exactly ${count} educational flashcards from the document that provided you.
-    Format of each flash card as:
-    Q: [Clear, specific question]
-    A: [Concise, accurate answer]
-    D: [Difficulty level: easy, medium, or hard]
+export const generateFlashcards = async (content, count = 10) => {
+  const prompt = `**System Role:** You are an expert in Spaced Repetition Learning.
 
-    Seperate each flashcard with "---"`;
+**Goal:** Generate exactly ${count} high-yield flashcards optimized for active recall.
 
-  const pdfResp = await fetch(url).then((response) => response.arrayBuffer());
+**Card Design Rules:**
+1. **Atomic Concepts:** Each card should test ONE specific idea. Do not bundle multiple complex facts into one card.
+2. **Front (Q):** Use clear triggers. Instead of "What is X?", use "Function of X in context of Y" or "Key difference between A and B".
+3. **Back (A):** Be concise. Get straight to the answer. Avoid "The answer is..." or full sentences if a keyword suffices.
+4. **Coverage:** Ensure the cards cover the entire breadth of the provided content, from start to finish.
 
-  const contents = [
-    { text: prompt },
-    {
-      inlineData: {
-        mimeType: "application/pdf",
-        data: Buffer.from(pdfResp).toString("base64"),
-      },
-    },
-  ];
+**Output Format (STRICT):**
+Separate each flashcard with "---".
+
+Q: [Front of card - The Trigger]
+A: [Back of card - The Answer]
+D: [Difficulty: easy, medium, or hard]
+
+---
+
+**Input Content:**
+${content}`;
+
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: contents,
+      contents: prompt,
     });
 
     const generatedText = response.text;
@@ -148,26 +239,29 @@ export const generateFlashcards = async (url, count = 10) => {
   }
 };
 
-export const generateSummary = async (url) => {
-  const prompt = `Provide a concise summary of the following document, highlighting the key concepets, main ideas, and important points.
-  Keep the summary clear and structured`;
+export const generateSummary = async (content) => {
+  const prompt = `**System Role:** You are an Academic Synthesizer.
 
-  const pdfResp = await fetch(url).then((response) => response.arrayBuffer());
+**Goal:** Distill the provided content into a structured, high-impact summary that acts as a "Cheat Sheet" for a student.
 
-  const contents = [
-    { text: prompt },
-    {
-      inlineData: {
-        mimeType: "application/pdf",
-        data: Buffer.from(pdfResp).toString("base64"),
-      },
-    },
-  ];
+**Style Guidelines:**
+1. **Executive Summary:** Start with a 2-sentence "Big Picture" overview.
+2. **Core Concepts:** Group the summary into 3-5 main themes found in the text.
+3. **No Fluff:** Remove conversational filler. Use active verbs.
+4. **Clarity:** If the content is technical, simplify the language slightly without losing accuracy.
+
+**Output Format:**
+- **Executive Summary**
+- **Key Concepts** (Use bullet points)
+- **Critical Takeaways**
+
+**Input Content:**
+${content}`;
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: contents,
+      contents: prompt,
     });
     return response.text;
   } catch (error) {
@@ -176,32 +270,34 @@ export const generateSummary = async (url) => {
   }
 };
 
-export const chatWithContext = async (question, url, chatHistoryMessages) => {
-  const prompt = `Based on the context of the provided document, analyze the context and answer the user's question
-  If the answer is not in the context, say so.
-  
-  Question: ${question}
+export const chatWithContext = async (
+  question,
+  content,
+  chatHistoryMessages,
+) => {
+  const prompt = `**System Role:** You are a Socratic AI Tutor. Your goal is to help the user learn from the document provided.
 
-  Previous Chat of user and ai assisstant: ${chatHistoryMessages}
-  
-  Answer:`;
+**Instructions:**
+1. **Source Truth:** Answer ONLY based on the "Context" provided below. If the answer is not in the text, state: "I cannot find that information in this specific document."
+2. **Tone:** Be encouraging, precise, and educational.
+3. **Citation:** If possible, mention which part of the text your answer comes from (e.g., "According to the section on X...").
+4. **Chat History:** Use the "Previous Chat" to maintain context (e.g., if the user says "Tell me more", know what they are referring to).
 
-  const pdfResp = await fetch(url).then((response) => response.arrayBuffer());
+**Context:**
+${content}
 
-  const contents = [
-    { text: prompt },
-    {
-      inlineData: {
-        mimeType: "application/pdf",
-        data: Buffer.from(pdfResp).toString("base64"),
-      },
-    },
-  ];
+**Previous Chat:**
+${chatHistoryMessages}
+
+**User Question:**
+${question}
+
+**Answer:**`;
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: contents,
+      contents: prompt,
     });
     return response.text;
   } catch (error) {
@@ -210,26 +306,22 @@ export const chatWithContext = async (question, url, chatHistoryMessages) => {
   }
 };
 
-export const explainConcept = async (concept, url) => {
-  const prompt = `Explain the concept of ${concept} based on the context of the document provided
-    Provide a clear, educational explaination that is easy to understand.`;
+export const explainConcept = async (concept, content) => {
+  const prompt = `**System Role:** You are an expert educator using the Feynman Technique.
 
-  const pdfResp = await fetch(url).then((response) => response.arrayBuffer());
+**Goal:** Explain the concept of "${concept}" so clearly that a beginner would grasp it immediately, but keep the technical depth for an advanced learner.
 
-  const contents = [
-    { text: prompt },
-    {
-      inlineData: {
-        mimeType: "application/pdf",
-        data: Buffer.from(pdfResp).toString("base64"),
-      },
-    },
-  ];
+**Structure of Explanation:**
+1. **The "ELI5" (Explain Like I'm 5):** A one-sentence simple definition.
+2. **The Analogy:** A real-world comparison to make the concept stick (e.g., comparing a firewall to a security guard).
+3. **The Technical Deep Dive:** The specific details, formulas, or rigorous definition found in the source text.
 
+**Input Content:**
+${content}`;
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: contents,
+      contents: prompt,
     });
     return response.text;
   } catch (error) {
@@ -238,55 +330,29 @@ export const explainConcept = async (concept, url) => {
   }
 };
 
-export const generateVoiceOverviewScript = async (url) => {
-  const prompt = `You are an expert educator and narrator for a premium AI learning app.
+export const generateVoiceOverviewScript = async (content) => {
+  const prompt = `**System Role:** You are the host of a top-tier educational podcast.
 
-Your task is to generate a voice-over script based on the provided document.
+**Goal:** Write a solo voice-over script that teaches the core message of this content.
 
-STYLE & DELIVERY RULES:
-- The script must sound completely natural when spoken aloud.
-- Write exactly how a great teacher would speak to a curious student.
-- Use a friendly, confident, and engaging tone.
-- Explain concepts clearly, step by step, without sounding robotic.
-- Use short and medium-length sentences.
-- Use pauses with ellipses (…) where a natural pause would occur.
-- Use excitement sparingly with exclamation marks (!) only when appropriate.
-- Use a calm, softer tone by slowing the sentence structure — NOT by labeling emotions.
-- NEVER include brackets, labels, or emotion tags like [whispers], [excitedly], etc.
-- Everything you write will be spoken exactly as written.
+**Speaking Style:**
+- **Warm & Authoritative:** You are an expert, but you are friendly.
+- **Narrative Flow:** Do not just list facts. Connect ideas. Use phrases like "Now, this leads us to..." or "Here is where it gets interesting..."
+- **Visual Painting:** Since this is audio, describe the key concepts vividly.
+- **Spoken Word Optimization:** Use contractions (don't -> do not). Avoid long, winding sentences. Write for the ear, not the eye.
 
-EDUCATIONAL GUIDELINES:
-- Assume the listener is intelligent but learning this topic for the first time.
-- Use simple analogies where helpful.
-- Avoid filler phrases like “In this document we will…”
-- Speak directly to the listener using “you” where appropriate.
-- Maintain a smooth narrative flow from one idea to the next.
+**Constraint:**
+- Output ONLY the raw text of the script.
+- Do NOT use Markdown formatting.
+- Do NOT use headers or "Intro/Outro" labels.
 
-OUTPUT REQUIREMENTS:
-- Output ONLY the voice-over script.
-- Do NOT include headings, bullet points, or formatting.
-- Do NOT mention the document, PDF, or source.
-- Do NOT include any meta commentary.
-
-The script should feel like a calm, engaging podcast-style explanation that helps the listener truly understand the material.
-`;
-
-  const pdfResp = await fetch(url).then((response) => response.arrayBuffer());
-
-  const contents = [
-    { text: prompt },
-    {
-      inlineData: {
-        mimeType: "application/pdf",
-        data: Buffer.from(pdfResp).toString("base64"),
-      },
-    },
-  ];
+**Input Content:**
+${content}`;
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: contents,
+      contents: prompt,
     });
     return response.text;
   } catch (error) {
@@ -295,70 +361,40 @@ The script should feel like a calm, engaging podcast-style explanation that help
   }
 };
 
-export const generatePodcast = async (url, voice_id1, voice_id2) => {
-  const prompt = `You are writing a natural, educational podcast-style dialogue for a premium AI learning app.
+export const generatePodcast = async (content, voice_id1, voice_id2) => {
+  const prompt = `**System Role:** You are a Podcast Scriptwriter for an educational show.
 
-The goal is to help the listener deeply understand the provided document through a friendly conversation between two voices.
+**Characters:**
+- **Voice A (The Expert - ${voice_id1}):** Knowledgeable, patient, clear. Uses analogies.
+- **Voice B (The Learner - ${voice_id2}):** Curious, enthusiastic, smart but new to the topic. Represents the listener's internal monologue.
 
-VOICE ROLES:
-- Voice A (voiceId: ${voice_id1}): A calm, confident expert who explains concepts clearly.
-- Voice B (voiceId: ${voice_id2}): A curious learner who asks smart questions, seeks clarification, and reacts naturally.
+**Dialogue Dynamics:**
+1. **No Robot Talk:** Avoid "That is a great question, let me explain." Instead use: "Exactly! And the reason for that is..."
+2. **The "Aha" Moment:** Have Voice B struggle with a concept slightly, then "get it" after Voice A explains. This reinforces learning for the listener.
+3. **Pacing:** Keep exchanges relatively short (2-4 sentences max per turn).
 
-STYLE & DELIVERY RULES:
-- The dialogue must sound completely natural when spoken aloud.
-- Write exactly how real people speak in a podcast.
-- Keep sentences conversational, clear, and engaging.
-- Use curiosity, mild excitement, and thoughtful pauses through wording — NOT labels.
-- Do NOT include any emotion tags, brackets, or stage directions.
-- Do NOT include filler like “Welcome to the podcast” or “In this episode”.
-- Avoid robotic back-and-forth. Let the conversation flow naturally.
-- Voice B should ask genuine follow-up questions, not scripted ones.
-- Voice A should explain using simple analogies and examples when helpful.
-- Avoid repeating information unnecessarily.
+**Output Format (STRICT JSON):**
+You must output a VALID JSON array. Do NOT wrap it in markdown code blocks (like \`\`\`json). Just return the raw array.
 
-EDUCATIONAL GUIDELINES:
-- Assume the listener is intelligent but new to the topic.
-- Break complex ideas into small, understandable parts.
-- Focus on clarity and understanding, not speed.
-- Speak directly to the listener using natural language.
-
-OUTPUT FORMAT (STRICT):
-- Output ONLY a JSON array.
-- Each item must be an object with exactly:
-  - "voiceId": one of the provided voice IDs
-  - "text": the dialogue text for that speaker
-- Do NOT include anything outside the JSON array.
-- Do NOT wrap the output in markdown.
-
-Example format:
+Structure:
 [
   {
-    "voiceId": ${voice_id1},
-    "text": "Let’s start by thinking about this in a simple way..."
+    "voiceId": "${voice_id1}",
+    "text": "Script for voice A..."
   },
   {
-    "voiceId": ${voice_id2},
-    "text": "Okay, that makes sense. But what happens when..."
+    "voiceId": "${voice_id2}",
+    "text": "Script for voice B..."
   }
 ]
-`;
 
-  const pdfResp = await fetch(url).then((response) => response.arrayBuffer());
-
-  const contents = [
-    { text: prompt },
-    {
-      inlineData: {
-        mimeType: "application/pdf",
-        data: Buffer.from(pdfResp).toString("base64"),
-      },
-    },
-  ];
+**Input Content:**
+${content}`;
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: contents,
+      contents: prompt,
     });
     return response.text;
   } catch (error) {
