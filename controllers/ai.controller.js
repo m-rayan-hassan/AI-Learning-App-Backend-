@@ -92,6 +92,8 @@ export const generateQuiz = async (req, res, next) => {
       });
     }
 
+    console.log("number of questions: ", numQuestions);
+    
     const content = document.extractedText;
     const questions = await aiFunctionalities.generateQuiz(
       content,
