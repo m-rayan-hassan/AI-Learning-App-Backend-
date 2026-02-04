@@ -1,7 +1,7 @@
 import Flashcard from "../models/Flashcard.model.js";
 
 export const getFlashcards = async (req, res, next) => {
-  try {  
+  try {
     const flashcards = await Flashcard.find({
       userId: req.user._id,
       documentId: req.params.documentId,
@@ -102,15 +102,15 @@ export const toggleFlashcard = async (req, res, next) => {
       });
     }
 
-    flashcardSet.cards[cardIndex].inStarted =
-      !flashcardSet.cards[cardIndex].inStarted;
+    flashcardSet.cards[cardIndex].isStared =
+      !flashcardSet.cards[cardIndex].isStared;
 
     await flashcardSet.save();
 
     res.status(200).json({
       success: true,
       data: flashcardSet,
-      message: `Flashcard ${flashcardSet.cards[cardIndex].isStarted ? "stared" : "unstarted"}`,
+      message: `Flashcard ${flashcardSet.cards[cardIndex].isStared ? "stared" : "unstarted"}`,
     });
   } catch (error) {
     next(error);

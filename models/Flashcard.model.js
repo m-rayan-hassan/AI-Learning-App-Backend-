@@ -35,7 +35,7 @@ const flashCardSchema = new mongoose.Schema(
           type: Number,
           default: 0,
         },
-        isStarted: {
+        isStared: {
           type: Boolean,
           default: false,
         },

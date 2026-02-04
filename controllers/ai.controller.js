@@ -146,8 +146,10 @@ export const generateSummary = async (req, res, next) => {
     const content = document.extractedText;
     const summary = await aiFunctionalities.generateSummary(content);
 
-    // TODO:  save summary  to db
+    document.summary = summary;
 
+    await document.save();
+    
     res.status(200).json({
       success: true,
       data: {

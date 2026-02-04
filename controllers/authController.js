@@ -53,6 +53,52 @@ export const registerUser = async (req, res) => {
   }
 };
 
+// @desc    Get User Profile
+export const getProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      _id: user._id,
+      username: user.username,
+      email: user.email,
+      profileImage: user.profileImage,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// @desc    Update User Profile
+export const updateProfile = async (req, res) => {
+  try {
+    const { username, profileImage } = req.body;
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (username) user.username = username;
+    if (profileImage) user.profileImage = profileImage;
+
+    await user.save();
+
+    res.status(200).json({
+      _id: user._id,
+      username: user.username,
+      email: user.email,
+      profileImage: user.profileImage,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // @desc    Login user
 export const loginUser = async (req, res) => {
   const { error } = loginSchema.validate(req.body);
@@ -83,33 +129,32 @@ export const googleLogin = async (req, res) => {
   const { token } = req.body; // Token from frontend
 
   try {
-    // Support either an ID token (id_token) or an access token (access_token)
     let name, email, picture, sub;
+
+    // Try to verify as ID token first
     try {
       const ticket = await client.verifyIdToken({
         idToken: token,
         audience: process.env.GOOGLE_CLIENT_ID,
       });
-      const payload = ticket.getPayload() || {};
+      const payload = ticket.getPayload();
       name = payload.name;
       email = payload.email;
       picture = payload.picture;
       sub = payload.sub;
     } catch (verifyErr) {
-      // Fallback: token might be an access_token, fetch userinfo
-      try {
-        const resp = await fetch(
-          `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${token}`,
-        );
-        if (!resp.ok) throw new Error("Failed to fetch Google userinfo");
-        const info = await resp.json();
-        name = info.name;
-        email = info.email;
-        picture = info.picture;
-        sub = info.sub || info.user_id;
-      } catch (userinfoErr) {
-        throw verifyErr;
+      // Fallback: treat as access token and fetch userinfo
+      const response = await fetch(
+        `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${token}`,
+      );
+      if (!response.ok) {
+        throw new Error("Failed to fetch Google userinfo");
       }
+      const userinfo = await response.json();
+      name = userinfo.name;
+      email = userinfo.email;
+      picture = userinfo.picture;
+      sub = userinfo.sub || userinfo.user_id;
     }
 
     let user = await User.findOne({ email });
@@ -141,6 +186,7 @@ export const googleLogin = async (req, res) => {
       token: generateToken(user._id),
     });
   } catch (err) {
+    console.error("Google login error:", err.message);
     res
       .status(500)
       .json({ message: "Google authentication failed", error: err.message });
