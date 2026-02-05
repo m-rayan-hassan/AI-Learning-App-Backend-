@@ -51,7 +51,7 @@ const documentSchema = new mongoose.Schema(
       required: true,
       default: "",
     },
-    voiceOveviewUrl: {
+    voiceOverviewUrl: {
       type: String,
     },
     podcastUrl: {

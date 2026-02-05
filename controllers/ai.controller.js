@@ -93,7 +93,7 @@ export const generateQuiz = async (req, res, next) => {
     }
 
     console.log("number of questions: ", numQuestions);
-    
+
     const content = document.extractedText;
     const questions = await aiFunctionalities.generateQuiz(
       content,
@@ -151,7 +151,7 @@ export const generateSummary = async (req, res, next) => {
     document.summary = summary;
 
     await document.save();
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -363,7 +363,7 @@ export const generateVoiceOverview = async (req, res, next) => {
 
     await fs.unlink(path.resolve(voiceOverviewFilePath));
 
-    document.voiceOveviewUrl = voiceOverviewUrl;
+    document.voiceOverviewUrl = voiceOverviewUrl;
 
     await document.save();
 
