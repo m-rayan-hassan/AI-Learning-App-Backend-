@@ -9,6 +9,7 @@ import {
   chatHistory,
   generateVoiceOverview,
   generatePodcast,
+  generateVideo,
 } from "../controllers/ai.controller.js";
 const router = expresss.Router();
 
@@ -22,4 +23,5 @@ router.post("/explain-concept", explainConcept);
 router.get("/chat-history/:documentId", chatHistory);
 router.post("/generate-voice-overview", generateVoiceOverview);
 router.post("/generate-podcast", generatePodcast);
+router.post("/generate-video", generateVideo);
 export default router;

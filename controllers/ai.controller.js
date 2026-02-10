@@ -7,6 +7,9 @@ import * as voiceFunctionalities from "../utils/voiceFunctionalities.js";
 import { uploadMedia } from "../config/cloudinary.js";
 import fs from "fs/promises";
 import path from "path";
+import { constructGammaPrompt, startGammaGeneration, getGammaUrl } from "../utils/gammaFunctionalities.js";
+import { recordPresentation } from "../utils/recorder.js";
+import { stitchAudioAndVideo } from "../utils/stitcher.js";
 
 export const generateFlashcards = async (req, res, next) => {
   try {
@@ -435,6 +438,72 @@ export const generatePodcast = async (req, res, next) => {
       message: "Podcast generated successfully",
       podcast_url: podcastUrl,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const generateVideo = async (req, res, next) => {
+  try {
+    const { documentId } = req.body;
+
+    if (!documentId) {
+      return res.status(400).json({
+        success: false,
+        error: "Please provide documentId",
+        statusCode: 400,
+      });
+    }
+
+    const document = await Document.findOne({
+      _id: documentId,
+      userId: req.user._id,
+      status: "ready",
+    });
+
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        error: "Document not found or not ready",
+        statusCode: 404,
+      });
+    }
+
+    const content = document.extractedText;
+    const videoContent = await aiFunctionalities.generateVideoContent(content);
+    console.log("Video content", videoContent);
+    
+    const slideCount = videoContent.slideCount;
+
+    const gammaPrompt = constructGammaPrompt(videoContent);
+    const gammaId = await startGammaGeneration(gammaPrompt, slideCount);
+
+    console.log("Gamma ID: ", gammaId);
+    
+    const gammaUrl = await getGammaUrl(gammaId);
+    console.log("Gamma Url: ", gammaUrl);
+    
+    const audioScript = await voiceFunctionalities.generateVideoScript(videoContent);
+    const silentVidoPath = await recordPresentation(gammaUrl, audioScript);
+    const finalVideoPath = await stitchAudioAndVideo(silentVidoPath, audioScript);
+
+    const uploadVideoToCloudinary = await uploadMedia(finalVideoPath, "ai-learning-app/videos");
+
+    const videoUrl = uploadVideoToCloudinary.secure_url;
+    console.log("Video Url: ", videoUrl);
+    
+    document.videoUrl = videoUrl;
+
+    await document.save();
+    
+    await fs.unlink(path.resolve(finalVideoPath));
+
+    return res.status(200).json({
+      success: true,
+      message: "Video generated successfully",
+      data: videoUrl
+    })
+    
   } catch (error) {
     next(error);
   }

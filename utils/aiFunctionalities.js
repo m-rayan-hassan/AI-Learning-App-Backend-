@@ -402,3 +402,60 @@ ${content}`;
     throw new Error("Failed to generate podcast");
   }
 };
+
+export const generateVideoContent = async (content) => {
+  const prompt = `
+You are an expert Documentary Director and Instructional Designer.
+Your task is to convert the provided content into a structured JSON object for a high-end educational video.
+
+We use Gamma App (Visuals) and ElevenLabs (Audio).
+
+Content: ${content}
+
+REQUIREMENTS:
+1. **Structure & Pacing:** Break content into 5-8 slides.
+2. **Gamma Visual Prompts (High Quality):** In "gamma_card_content", you must drive the AI to create beautiful slides.
+   - **Layout:** Request specific layouts (e.g., "Split screen," "Timeline," "Gallery," "Big Number").
+   - **Imagery:** Include a dedicated "Image Style" instruction. Use adjectives like "Photorealistic," "Cinematic lighting," "4k," "Minimalist vector," or "Detailed diagram" to ensure attractive visuals.
+   - **On-Screen Text:** clearly state what text should be on the slide (Title + Bullet points).
+3. **Audio-Visual Sync (CRITICAL):** The "voiceover_script" must strictly align with the visual text to help the user understand.
+   - **Rule:** If a specific term or bullet point is written on the slide, the voiceover MUST speak that term exactly as it appears.
+   - **Context:** Use phrases like "As you can see here...", "Notice the diagram on the right...", or "These three steps shown below..." to connect the audio to the video.
+4. **Natural Delivery:** Write spoken English (contractions, natural flow), but ensure it is educational and clear.
+
+OUTPUT FORMAT (Strict JSON):
+You must output a VALID JSON array. Do NOT wrap it in markdown code blocks.
+
+{
+  "presentation_title": "String",
+  "gamma_global_prompt": "String",
+  "slides": [
+    {
+      "index": 1,
+      "type": "title_slide",
+      "gamma_card_content": "Layout: Cinematic Title Card. Title: 'The Quantum Realm'. Subtitle: 'Unlocking the Subatomic'. Visual: A glowing, futuristic quantum particle with blue neon lighting, 4k resolution, dark background.",
+      "voiceover_script": "Welcome. Today, we are stepping into 'The Quantum Realm', unlocking the mysteries of the subatomic world."
+    },
+    {
+      "index": 2,
+      "type": "content_slide",
+      "gamma_card_content": "Layout: Three-Column Grid. Title: 'Key Principles'. Columns: 1. Superposition, 2. Entanglement, 3. Interference. Visual: detailed 3D icons representing each physics concept.",
+      "voiceover_script": "There are three key principles you see listed here: Superposition, Entanglement, and Interference. Let's break down the first one, Superposition..."
+    }
+  ],
+  slideCount: 10
+}
+`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+    });
+    const data = JSON.parse(response.text);
+    return data;
+  } catch (error) {
+    console.error("Gemini API error", error);
+    throw new Error("Failed to generate video content");
+  }
+};

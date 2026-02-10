@@ -57,6 +57,9 @@ const documentSchema = new mongoose.Schema(
     podcastUrl: {
       type: String,
     },
+    videoUrl: {
+      type: String
+    },
     uploadDate: {
       type: Date,
       default: Date.now,
