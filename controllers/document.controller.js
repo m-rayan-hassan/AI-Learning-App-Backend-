@@ -2,7 +2,7 @@ import Document from "../models/Document.model.js";
 import Flashcard from "../models/Flashcard.model.js";
 import Quiz from "../models/Quiz.model.js";
 import ChatHistory from "../models/ChatHistory.model.js"
-import { uploadMedia } from "../config/cloudinary.js";
+import { deleteVideoFromCloudinary, uploadMedia } from "../config/cloudinary.js";
 import { convertToPdf } from "../utils/converter.js";
 import fs from "fs";
 import mongoose from "mongoose";
@@ -297,7 +297,15 @@ export const deleteDocument = async (req, res, next) => {
 
     await deleteMedia(document.originalFilePublicId);
     await deleteMedia(document.pdfFilePublicId);
-
+    if (document.voiceOverviewPublicId) {
+      await deleteVideoFromCloudinary(document.voiceOverviewPublicId);
+    }
+    if (document.podcastPublicId) {
+      await deleteVideoFromCloudinary(document.podcastPublicId);
+    }
+    if (document.videoPublicId) {
+      await deleteVideoFromCloudinary(document.videoPublicId);
+    }
     await Flashcard.deleteMany({documentId: document._id});
     await Quiz.deleteMany({documentId: document._id});
     await ChatHistory.deleteMany({documentId: document._id});

@@ -60,6 +60,15 @@ const documentSchema = new mongoose.Schema(
     videoUrl: {
       type: String
     },
+    voiceOverviewPublicId: {
+      type: String
+    },
+    podcastPublicId: {
+      type: String
+    },
+    videoPublicId: {
+      type: String
+    },
     uploadDate: {
       type: Date,
       default: Date.now,

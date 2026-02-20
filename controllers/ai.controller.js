@@ -367,6 +367,7 @@ export const generateVoiceOverview = async (req, res, next) => {
     await fs.unlink(path.resolve(voiceOverviewFilePath));
 
     document.voiceOverviewUrl = voiceOverviewUrl;
+    document.voiceOverviewPublicId = voiceOverview.public_id;
 
     await document.save();
 
@@ -430,6 +431,7 @@ export const generatePodcast = async (req, res, next) => {
     await fs.unlink(path.resolve(podcastFilePath));
 
     document.podcastUrl = podcastUrl;
+    document.podcastPublicId = podcast.public_id;
 
     await document.save();
 
@@ -487,12 +489,13 @@ export const generateVideo = async (req, res, next) => {
     const silentVidoPath = await recordPresentation(gammaUrl, audioScript);
     const finalVideoPath = await stitchAudioAndVideo(silentVidoPath, audioScript);
 
-    const uploadVideoToCloudinary = await uploadMedia(finalVideoPath, "ai-learning-app/videos");
+    const video = await uploadMedia(finalVideoPath, "ai-learning-app/videos");
 
-    const videoUrl = uploadVideoToCloudinary.secure_url;
+    const videoUrl = video.secure_url;
     console.log("Video Url: ", videoUrl);
     
     document.videoUrl = videoUrl;
+    document.videoPublicId = video.public_id;
 
     await document.save();
     
