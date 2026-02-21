@@ -13,7 +13,8 @@ import aiRoutes from "./routes/ai.routes.js";
 import flashcardRoutes from "./routes/flashcard.routes.js";
 import quizRoutes from "./routes/quiz.routes.js";
 import progressRoutes from "./routes/progress.routes.js"
-
+import { paymentWebhook } from "./controllers/payment.controller.js";
+import paymentRouter from "./routes/payment.routes.js";
 // Load environment variables
 dotenv.config();
 
@@ -65,18 +66,26 @@ if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
 
+// Webhook
+app.post('/webhook', express.raw({ type: 'application/json' }), paymentWebhook);
+
 // Body Parser Middleware
 app.use(express.json({ limit: "10kb" })); // Body limit is 10kb
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(cookieParser());
 
 // API Routes
+app.get("/", (req, res) => {
+  res.send("Hello");
+})
 app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/flashcards", flashcardRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/quizzes", quizRoutes);
-app.use("/api/progress", progressRoutes)
+app.use("/api/progress", progressRoutes);
+app.use("/api/payments", paymentRouter);
+
 // 404 Handler
 app.use((req, res) => {
   res.status(404).json({

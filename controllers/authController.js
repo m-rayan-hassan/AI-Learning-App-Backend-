@@ -67,6 +67,9 @@ export const getProfile = async (req, res) => {
       username: user.username,
       email: user.email,
       profileImage: user.profileImage,
+      planType: user.planType,
+      subscriptionStatus: user.subscriptionStatus,
+      subscriptionEndDate: user.subscriptionEndDate
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
