@@ -33,6 +33,7 @@ export const getSubscription = async (req, res) => {
         subscriptionStatus: user.subscriptionStatus,
         subscriptionEndDate: user.subscriptionEndDate,
         hasActiveSubscription: user.planType !== 'free' && user.subscriptionStatus === 'active',
+        paddleScheduledChange: user.paddleScheduledChange
       }
     });
   } catch (error) {
@@ -210,6 +211,7 @@ export const cancelSubscription = async (req, res) => {
     }
 
     user.subscriptionStatus = 'canceled';
+    user.paddleScheduledChange = { action: 'cancel' };
     await user.save();
 
     return res.json({

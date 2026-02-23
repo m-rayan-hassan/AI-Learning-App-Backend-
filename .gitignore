@@ -1,2 +1,17 @@
+# Temporary generated files
+temp_video/
+temp_audio/
+
+public/
+# Puppeteer browser session data
+gamma_session/
+user_data/
+user_session/
+
+# Dependencies
+node_modules/
+
+# Environment
 .env
-node_modules
+
+test_recorder.js

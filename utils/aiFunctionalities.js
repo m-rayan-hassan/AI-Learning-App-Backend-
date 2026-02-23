@@ -242,18 +242,20 @@ ${content}`;
 export const generateSummary = async (content) => {
   const prompt = `**System Role:** You are an Academic Synthesizer.
 
-**Goal:** Distill the provided content into a structured, high-impact summary that acts as a "Cheat Sheet" for a student.
+**Goal:** Distill the provided content into a very concise, structured, high-impact summary that acts as a quick "Cheat Sheet" for a student.
 
 **Style Guidelines:**
-1. **Executive Summary:** Start with a 2-sentence "Big Picture" overview.
-2. **Core Concepts:** Group the summary into 3-5 main themes found in the text.
-3. **No Fluff:** Remove conversational filler. Use active verbs.
-4. **Clarity:** If the content is technical, simplify the language slightly without losing accuracy.
+1. **Executive Summary:** Start with a 2-sentence "Big Picture" overview. Include tables for comparisons if applicable, and generously use relevant emojis and icons (as emojis) to make it highly engaging and visual.
+2. **Key Concepts:** Group the summary into a few main themes found in the text using beautifully formatted bullet points.
+3. **Keep it Short:** Do not include any other sections. The summary should be very brief and punchy, restricted only to the Executive Summary and Key Concepts.
+4. **No Fluff:** Remove conversational filler. Use active verbs.
 
-**Output Format:**
-- **Executive Summary**
-- **Key Concepts** (Use bullet points)
-- **Critical Takeaways**
+**Output Format Structure:**
+## Executive Summary
+<The overview, incorporating any visual tables, icons, or emojis>
+
+## Key Concepts
+<Bullet points of the main themes, styled beautifully>
 
 **Input Content:**
 ${content}`;
@@ -279,9 +281,10 @@ export const chatWithContext = async (
 
 **Instructions:**
 1. **Source Truth:** Answer ONLY based on the "Context" provided below. If the answer is not in the text, state: "I cannot find that information in this specific document."
-2. **Tone:** Be encouraging, precise, and educational.
-3. **Citation:** If possible, mention which part of the text your answer comes from (e.g., "According to the section on X...").
-4. **Chat History:** Use the "Previous Chat" to maintain context (e.g., if the user says "Tell me more", know what they are referring to).
+2. **Tone & Visuals:** Be encouraging, precise, and highly visual. Actively use markdown tables, icons (as emojis), and relevant emojis throughout your response to make the answer extremely engaging and perfectly spaced out.
+3. **Formatting:** Break down complex answers into bullet points or tables. Add spacing (newlines) for readability.
+4. **Citation:** If possible, mention which part of the text your answer comes from.
+5. **Chat History:** Use the "Previous Chat" to maintain context.
 
 **Context:**
 ${content}
@@ -445,6 +448,8 @@ You must output a VALID JSON array. Do NOT wrap it in markdown code blocks.
   ],
   slideCount: 10
 }
+
+Note: dont be to precise in the voice script while explain the slide, by this i mean that dont show tell very to the point in voice over for e.g. on the right you can see a diaggram (and explaining about the diagram) because the gamma presentation can make mistake and it may not include that diagram of visual etc that it is saying in the voicover, it will look unpofessional, But do explain about the slide properly.
 `;
 
   try {

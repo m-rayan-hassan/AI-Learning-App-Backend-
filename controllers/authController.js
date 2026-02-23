@@ -65,11 +65,11 @@ export const getProfile = async (req, res) => {
     res.status(200).json({
       _id: user._id,
       username: user.username,
-      email: user.email,
       profileImage: user.profileImage,
       planType: user.planType,
       subscriptionStatus: user.subscriptionStatus,
-      subscriptionEndDate: user.subscriptionEndDate
+      subscriptionEndDate: user.subscriptionEndDate,
+      paddleScheduledChange: user.paddleScheduledChange
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

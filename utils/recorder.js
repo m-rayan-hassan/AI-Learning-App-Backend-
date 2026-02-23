@@ -1,60 +1,77 @@
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { connect } from 'puppeteer-real-browser';
 import { PuppeteerScreenRecorder } from 'puppeteer-screen-recorder';
 import path from 'path';
 import fs from 'fs';
 
-puppeteer.use(StealthPlugin());
-
 export const recordPresentation = async (presentationUrl, audioData) => {
   console.log(`🎥 Starting Cinematic Recorder for: ${presentationUrl}`);
   
-  const browser = await puppeteer.launch({
-    // FIX 1: Use new headless mode (renders closer to real chrome)
-    headless: "new", 
+  // Use puppeteer-real-browser to bypass Cloudflare Turnstile
+  const { browser, page } = await connect({
+    headless: false,        // Required for best anti-detection
+    turnstile: true,        // Auto-solve Cloudflare Turnstile challenges
+    disableXvfb: false,     // Use Xvfb for virtual display on Linux
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--start-fullscreen',
       '--window-size=1920,1080',
-      // FIX 2: Force GPU and WebGL (Critical for animations)
       '--enable-gpu',
-      '--use-gl=swiftshader',     // Use software GPU if real one missing
+      '--use-gl=swiftshader',
       '--enable-webgl',
       '--hide-scrollbars',
       '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas=false',
     ],
-    defaultViewport: { width: 1920, height: 1080 }
   });
 
-  const page = await browser.newPage();
+  // Set viewport to 1920x1080 for consistent recording
+  await page.setViewport({ width: 1920, height: 1080 });
 
-  // FIX 3: TELL GAMMA TO PLAY ANIMATIONS
-  // This is the most important line. It overrides the default "reduce motion" setting.
+  // Tell the browser to NOT reduce motion — needed for Gamma animations
   await page.emulateMediaFeatures([
     { name: 'prefers-reduced-motion', value: 'no-preference' }
   ]);
 
-  // Set User Agent to a rich desktop to ensure high-quality assets load
-  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
+  // Navigate to the Gamma presentation
+  console.log('🌐 Navigating to presentation...');
+  await page.goto(presentationUrl, { waitUntil: 'networkidle2', timeout: 90000 });
 
-  // Navigate
-  await page.goto(presentationUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+  // Wait for Turnstile to be solved (puppeteer-real-browser handles this automatically)
+  // Then wait for the actual presentation content to load
+  console.log('⏳ Waiting for Cloudflare verification to complete...');
+  
+  // Wait until the Turnstile challenge is gone and real content appears
+  // Gamma pages have a specific structure — wait for either the document body
+  // or cards to appear, indicating we're past Cloudflare
+  try {
+    await page.waitForFunction(() => {
+      // Check that Cloudflare challenge iframe is gone
+      const turnstileFrame = document.querySelector('iframe[src*="challenges.cloudflare.com"]');
+      const turnstileContainer = document.querySelector('#challenge-running, #challenge-stage');
+      // If neither turnstile element exists, we're past the challenge
+      return !turnstileFrame && !turnstileContainer;
+    }, { timeout: 60000 });
+    console.log('✅ Cloudflare verification passed!');
+  } catch (e) {
+    console.warn('⚠️ Cloudflare check timed out, proceeding anyway...', e.message);
+  }
+
+  // Give the page extra time to fully render after passing Cloudflare
+  await new Promise(r => setTimeout(r, 5000));
 
   // Enter Present Mode
   try {
     await page.click('body');
     await new Promise(r => setTimeout(r, 1000));
     
-    // Ctrl+Shift+Enter
+    // Ctrl+Shift+Enter to enter presentation mode
     await page.keyboard.down('Control'); 
     await page.keyboard.down('Shift');
     await page.keyboard.press('Enter');
     await page.keyboard.up('Shift');
     await page.keyboard.up('Control');
 
-    // Wait 5s for the Fullscreen transition to settle
+    // Wait for the fullscreen transition to settle
     await new Promise(r => setTimeout(r, 5000)); 
   } catch (e) {
     console.warn("⚠️ Mode switch warning:", e);
@@ -63,10 +80,10 @@ export const recordPresentation = async (presentationUrl, audioData) => {
   // Setup Recorder - Use 60 FPS for smooth motion
   const recorder = new PuppeteerScreenRecorder(page, {
     followNewTab: false,
-    fps: 60,                // 60fps is required to capture smooth CSS transitions
+    fps: 60,
     ffmpeg_Path: '/usr/bin/ffmpeg', 
     videoFrame: { width: 1920, height: 1080 },
-    videoCrf: 18,           // High Quality
+    videoCrf: 18,
     aspectRatio: '16:9',
   });
 
@@ -95,7 +112,6 @@ export const recordPresentation = async (presentationUrl, audioData) => {
       
       // 4. CAPTURE THE ANIMATION
       // Gamma animations take about 1.0 - 1.2 seconds.
-      // We must record this "Movement" phase before the next audio theoretically starts.
       await new Promise(r => setTimeout(r, 1500)); 
     }
   }
