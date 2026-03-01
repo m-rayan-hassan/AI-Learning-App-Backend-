@@ -5,7 +5,7 @@ import path from 'path';
 /**
  * Merges audio and video, then cleans up all temporary files.
  */
-export const stitchAudioAndVideo = async (silentVideoPath, audioData) => {
+export const stitchAudioAndVideo = async (silentVideoPath, audioData, docId) => {
   console.log("🧵 Stitching Audio & Video...");
 
   const tempDir = path.dirname(silentVideoPath);
@@ -16,7 +16,7 @@ export const stitchAudioAndVideo = async (silentVideoPath, audioData) => {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  const finalOutputPath = path.join(outputDir, `course_${Date.now()}.mp4`);
+  const finalOutputPath = path.join(outputDir, `course_${docId}_${Date.now()}.mp4`);
   
   // Intermediate Temp Files
   const audioListPath = path.join(tempDir, `concat_list_${Date.now()}.txt`);
@@ -104,6 +104,17 @@ export const stitchAudioAndVideo = async (silentVideoPath, audioData) => {
         fs.unlinkSync(file);
       }
     });
+
+    // C. Try to delete the temp directories (temp_video and temp_audio for this docId)
+    try {
+      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+      if (audioData.length > 0) {
+        const audioTempDir = path.dirname(audioData[0].filePath);
+        if (fs.existsSync(audioTempDir)) fs.rmSync(audioTempDir, { recursive: true, force: true });
+      }
+    } catch(e) {
+      console.warn("Could not delete temp directories", e);
+    }
 
     console.log("✨ Cleanup Complete.");
 

@@ -3,7 +3,7 @@ import { PuppeteerScreenRecorder } from 'puppeteer-screen-recorder';
 import path from 'path';
 import fs from 'fs';
 
-export const recordPresentation = async (presentationUrl, audioData) => {
+export const recordPresentation = async (presentationUrl, audioData, docId) => {
   console.log(`🎥 Starting Cinematic Recorder for: ${presentationUrl}`);
   
   // Use puppeteer-real-browser to bypass Cloudflare Turnstile
@@ -87,9 +87,9 @@ export const recordPresentation = async (presentationUrl, audioData) => {
     aspectRatio: '16:9',
   });
 
-  const tempDir = path.join(process.cwd(), 'temp_video');
+  const tempDir = path.join(process.cwd(), "temp_video", docId.toString());
   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-  const outputVideoPath = path.join(tempDir, `silent_${Date.now()}.mp4`);
+  const outputVideoPath = path.join(tempDir, `silent_${docId}_${Date.now()}.mp4`);
   
   await recorder.start(outputVideoPath);
   console.log("🔴 Recording Started (60 FPS)...");

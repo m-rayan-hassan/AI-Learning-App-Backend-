@@ -19,10 +19,6 @@ const videoSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  count: {
-    type: Number,
-    default: 0
-  },
 }, {
     timestamps: true
 });
@@ -31,4 +27,4 @@ videoSchema.index({ userId: 1, documentId: 1 });
 
 const VideoOverview = mongoose.model("VideoOverview", videoSchema);
 
-export default videoSchema;
+export default VideoOverview;

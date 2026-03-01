@@ -8,7 +8,7 @@ const elevenlabs = new ElevenLabsClient({
   apiKey: process.env.ELEVEN_LABS_API_KEY,
 });
 
-export const generateVoice = async (text) => {
+export const generateVoice = async (text, docId) => {
   try {
     const audioBuffer = await elevenlabs.textToSpeech.convert(
       "JBFqnCBsd6RMkjVDRZzb",
@@ -19,7 +19,11 @@ export const generateVoice = async (text) => {
       },
     );
 
-    const outputPath = path.join("uploads", `test${Date.now()}.mp3`);
+    const uploadDir = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    const outputPath = path.join(uploadDir, `voice_${docId}_${Date.now()}.mp3`);
 
     // Write the buffer directly to file
     await fs.promises.writeFile(outputPath, audioBuffer);
@@ -32,7 +36,7 @@ export const generateVoice = async (text) => {
   }
 };
 
-export const generatePodcast = async (script) => {
+export const generatePodcast = async (script, docId) => {
   try {
     const dialogue = JSON.parse(script);
 
@@ -41,7 +45,11 @@ export const generatePodcast = async (script) => {
       inputs: dialogue,
     });
 
-    const outputPath = path.join("uploads", `podcast${Date.now()}.mp3`);
+    const uploadDir = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    const outputPath = path.join(uploadDir, `podcast_${docId}_${Date.now()}.mp3`);
     const fileWriteStream = fs.createWriteStream(outputPath);
 
     // 2. Pipe the stream to the file
@@ -55,9 +63,9 @@ export const generatePodcast = async (script) => {
   }
 };
 
-export const generateVideoScript = async (scriptData) => {
+export const generateVideoScript = async (scriptData, docId) => {
   const audioAssets = [];
-  const tempDir = path.join(process.cwd(), 'temp_audio'); // Create a temp folder
+  const tempDir = path.join(process.cwd(), "temp_audio", docId.toString()); // Create a temp folder
 
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });

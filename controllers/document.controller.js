@@ -9,6 +9,9 @@ import mongoose from "mongoose";
 import { deleteMedia } from "../config/cloudinary.js";
 import { getFileInfo } from "../utils/getFileInfo.js";
 import * as aiFunctionalities from "../utils/aiFunctionalities.js"
+import VoiceOverview from "../models/VoiceOverview.model.js";
+import PodcastOverview from "../models/PodcastOverview.model.js";
+import VideoOverview from "../models/VideoOverview.model.js";
 
 // Upload Document Controller
 export const uploadDocument = async (req, res) => {
@@ -103,36 +106,51 @@ export const uploadDocument = async (req, res) => {
       console.error("Cleanup error:", cleanupError);
     }
 
-    console.log("Starting Gemini extraction...");
-    const getExtractedContent = await aiFunctionalities.getExtractedContent(pdfUrl);
-    console.log("Gemini extraction complete.");
-    
-    
-    // Save to Database
+    // Save to Database initially as processing
     const newDocument = new Document({
       userId,
       title: title || originalName,
       fileName: originalName,
       filePath: pdfUrl,
       fileSize: req.file.size,
-      extractedText: getExtractedContent,
+      extractedText: pdfUrl, // Will be updated later
       fileType: mimeType,
       originalUrl: originalUpload.secure_url,
       pdfUrl: pdfUrl,
       originalFilePublicId: originalUpload.public_id,
       pdfFilePublicId: pdfFilePublicId,
-      status: "ready",
+      status: "processing",
     });
 
     await newDocument.save();
     const duration = (Date.now() - startTime) / 1000;
-    console.log(`--- Document Upload Finished successfully in ${duration}s ---`);
+    console.log(`--- Document Upload request finished in ${duration}s, continuing processing in background ---`);
 
     res.status(201).json({
       success: true,
-      message: "Document uploaded and processed successfully",
+      message: "Document uploaded successfully. AI is now analyzing and extracting content.",
       data: newDocument,
     });
+
+    // Run AI extraction in the background
+    (async () => {
+      try {
+        console.log(`Starting background Gemini extraction for document ${newDocument._id}...`);
+        const getExtractedContent = await aiFunctionalities.getExtractedContent(pdfUrl);
+        console.log(`Gemini extraction complete for document ${newDocument._id}.`);
+        
+        await Document.findByIdAndUpdate(newDocument._id, {
+          extractedText: getExtractedContent,
+          status: "ready"
+        });
+        console.log(`Document ${newDocument._id} successfully updated to 'ready' status.`);
+      } catch (extractionError) {
+        console.error(`Background extraction error for document ${newDocument._id}:`, extractionError);
+        await Document.findByIdAndUpdate(newDocument._id, {
+          status: "failed"
+        });
+      }
+    })();
   } catch (error) {
     console.error("Upload controller error:", error);
     // Attempt cleanup if error occurred before final cleanup
@@ -295,20 +313,38 @@ export const deleteDocument = async (req, res, next) => {
       });
     }
 
+    const voicePublicId = await VoiceOverview.findOne({
+      documentId: document._id,
+      userId: req.user._id
+    }).select("publicId");
+
+    const podcastPublicId = await PodcastOverview.findOne({
+      documentId: document._id,
+      userId: req.user._id
+    }).select("publicId");
+
+    const videoPublicId = await VideoOverview.findOne({
+      documentId: document._id,
+      userId: req.user._id
+    }).select("publicId");
+
     await deleteMedia(document.originalFilePublicId);
     await deleteMedia(document.pdfFilePublicId);
-    if (document.voiceOverviewPublicId) {
-      await deleteVideoFromCloudinary(document.voiceOverviewPublicId);
+    if (voicePublicId) {
+      await deleteVideoFromCloudinary(voicePublicId);
     }
-    if (document.podcastPublicId) {
-      await deleteVideoFromCloudinary(document.podcastPublicId);
+    if (podcastPublicId) {
+      await deleteVideoFromCloudinary(podcastPublicId);
     }
-    if (document.videoPublicId) {
-      await deleteVideoFromCloudinary(document.videoPublicId);
+    if (videoPublicId) {
+      await deleteVideoFromCloudinary(videoPublicId);
     }
     await Flashcard.deleteMany({documentId: document._id});
     await Quiz.deleteMany({documentId: document._id});
     await ChatHistory.deleteMany({documentId: document._id});
+    await VoiceOverview.deleteOne({documentId: document._id});
+    await PodcastOverview.deleteOne({documentId: document._id});
+    await VideoOverview.deleteOne({documentId: document._id});
 
     await document.deleteOne();
 

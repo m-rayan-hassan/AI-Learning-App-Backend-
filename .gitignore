@@ -3,6 +3,7 @@ temp_video/
 temp_audio/
 
 public/
+uploads/
 # Puppeteer browser session data
 gamma_session/
 user_data/

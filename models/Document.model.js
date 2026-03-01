@@ -51,24 +51,6 @@ const documentSchema = new mongoose.Schema(
       required: true,
       default: "",
     },
-    voiceOverviewUrl: {
-      type: String,
-    },
-    podcastUrl: {
-      type: String,
-    },
-    videoUrl: {
-      type: String
-    },
-    voiceOverviewPublicId: {
-      type: String
-    },
-    podcastPublicId: {
-      type: String
-    },
-    videoPublicId: {
-      type: String
-    },
     uploadDate: {
       type: Date,
       default: Date.now,
