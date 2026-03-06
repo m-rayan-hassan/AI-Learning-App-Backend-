@@ -554,9 +554,9 @@ ${content}`;
 };
 
 export const generateVideoContent = async (content) => {
-  const prompt = `**System Role:** You are an award-winning Documentary Director and Senior Instructional Designer who creates premium educational video content for platforms competing with Khan Academy and Coursera. Your videos are known for stunning visuals, perfectly synchronized narration, and exceptional educational value.
+  const prompt = `**System Role:** You are an elite Instructional Designer and Presentation Architect who creates best-in-class educational slide presentations. You specialize in transforming dense material into clear, visually structured, and deeply informative slides that rival top university lectures and professional training decks. Your presentations are famous for clarity, rich data visualization, and making complex topics intuitive.
 
-**Technical Pipeline:** We use Gamma App for visual slide generation and ElevenLabs for AI voice narration. You must optimize your output for both systems.
+**Technical Pipeline:** We use Gamma App to render the slides and ElevenLabs for AI voice narration. Gamma excels at rendering **text-based structured elements** like tables, numbered lists, comparison grids, step-by-step flows, timelines, and formatted text blocks. You MUST optimize your output to leverage these native strengths.
 
 **Content to Transform:**
 ${content}
@@ -564,65 +564,114 @@ ${content}
 **REQUIREMENTS (Non-Negotiable):**
 
 ### 1. Structure & Pacing
-- Break content into **5-8 slides** with a clear narrative arc: Hook → Foundation → Core Concepts → Deep Dive → Synthesis/Summary
+- Break content into **6-10 slides** with a clear narrative arc: Hook → Foundation → Core Concepts → Deep Dive → Application/Examples → Synthesis/Summary
 - Each slide should focus on ONE major idea or a tightly related cluster of sub-points
 - Ensure logical progression — each slide builds on the previous one
-- Include a compelling title slide and a strong summary/conclusion slide
+- Include a compelling title slide and a strong summary/takeaway slide
+- Vary the slide types throughout — do NOT make every slide a bullet list
 
 ### 2. Gamma Visual Prompts (gamma_card_content) — CRITICAL FOR QUALITY
-The gamma_card_content drives the AI slide generator. You MUST write detailed, specific visual instructions:
-- **Layout:** Specify exact layout type for each slide: "Cinematic Title Card", "Split Screen", "Three-Column Grid", "Timeline", "Big Number + Context", "Comparison Table", "Process Flow", "Gallery", "Quote + Visual", "Bullet List with Icon Accents"
-- **On-Screen Text:** Explicitly state the EXACT title text and ALL bullet points/text that should appear on the slide. Be precise — this text is what the viewer reads.
-- **Visual/Image Direction:** Include a dedicated image instruction with rich descriptive adjectives. Use terms like: "Photorealistic", "Cinematic lighting", "4K resolution", "Minimalist vector illustration", "Detailed technical diagram", "Clean infographic style", "Professional stock photo aesthetic", "Dark premium background", "Gradient accent colors". The visual MUST be directly relevant to the slide's educational content — no generic or decorative images.
-- **Color & Mood:** Suggest a consistent visual theme (e.g., "Dark background with blue accent lighting" or "Clean white with bold color highlights")
 
-### 3. Voiceover Script — NATURAL & EDUCATIONAL
+The gamma_card_content field drives Gamma's slide generator. You MUST write highly specific, structured instructions that leverage Gamma's native rendering strengths.
+
+**GOLDEN RULE — Prefer Structured Text Elements Over AI Images:**
+Gamma renders tables, grids, numbered steps, comparison columns, timelines, and formatted text beautifully and consistently. AI-generated images often look generic, irrelevant, or uncanny. Therefore:
+- **USE HEAVILY:** Tables, comparison tables, numbered step-by-step flows, multi-column layouts with text, timelines with labeled milestones, definition lists, key-value pairs, pros/cons grids, hierarchical bullet structures, callout boxes, highlighted key terms, Q&A format blocks
+- **USE SPARINGLY:** AI images — only when a real-world photo or simple icon would genuinely aid understanding (e.g., a photo of a historical figure, a simple icon representing a concept). When you do request an image, describe a simple, concrete, real-world subject — NOT abstract/artistic/futuristic imagery.
+- **NEVER REQUEST:** Abstract AI art, futuristic visualizations, "cinematic" imagery, particle effects, neon lighting, "stunning" decorative backgrounds, or any image that doesn't directly teach something
+
+**For each slide, specify ALL of the following in gamma_card_content:**
+
+a) **Layout Type** — Choose the most appropriate for the content:
+   - "Comparison Table" — for contrasting 2-3 concepts side by side (with rows for attributes)
+   - "Numbered Step-by-Step Process" — for sequential procedures or workflows
+   - "Multi-Column Grid" — for presenting 2-4 parallel concepts with descriptions
+   - "Timeline" — for chronological events or phases
+   - "Definition List" — for key terms with explanations
+   - "Data Table" — for presenting structured data, statistics, or specifications
+   - "Pros and Cons / Two-Column Split" — for evaluating trade-offs
+   - "Hierarchy / Tree Structure" — for showing relationships or taxonomy
+   - "Title Card with Subtitle" — for opening/closing slides only
+   - "Key Takeaways / Summary Box" — for recap slides
+   - "Flowchart / Decision Flow" — for branching logic or processes
+   - "Single Concept Deep Dive" — for one idea with a heading, detailed explanation, and a supporting example
+
+b) **Exact On-Screen Text** — Write out the COMPLETE text content: slide title, every bullet point, every table cell, every label, every description. Do NOT leave anything vague or say "description of X" — write the actual description. Gamma can only display what you explicitly provide.
+
+c) **Visual Aids (text-based preferred):**
+   - If a TABLE would help: write out the full table with headers and all rows of data
+   - If a FLOWCHART would help: describe it as a labeled sequence of steps with arrows (Step A → Step B → Step C) with each step having a clear label
+   - If a DIAGRAM would help: describe it as a structured hierarchy or labeled relationship map using text
+   - If a real EXAMPLE would help: include a concrete worked example, case study, or scenario
+   - If an IMAGE is truly needed: describe a simple, concrete, real-world photo (e.g., "Photo of a DNA double helix model" or "Photo of a classroom whiteboard with equations") — keep it grounded and relevant
+
+d) **Formatting Cues** — Tell Gamma how to emphasize key info:
+   - Bold key terms and important phrases
+   - Use accent colors to highlight critical numbers or distinctions
+   - Use callout boxes or highlighted sections for important definitions or warnings
+
+### 3. Voiceover Script — NATURAL, THOROUGH & EDUCATIONAL
 - Write in natural spoken English: use contractions ("don't", "here's", "let's"), conversational pacing, and clear pronunciation-friendly language
-- The voiceover MUST explain the content shown on the slide thoroughly — cover every key point that appears on-screen
-- **IMPORTANT — Avoid Fragile Visual References:** Do NOT say things like "As you can see in the diagram on the right..." or "Notice the chart below showing..." because the Gamma AI may not place visuals exactly as described, which would make the narration sound out of sync. Instead, use SOFT references that work regardless of exact layout:
-  - GOOD: "Let's walk through the key principles..."
-  - GOOD: "There are three main factors at play here..."
-  - GOOD: "This is where things get interesting..."
+- The voiceover MUST thoroughly explain every piece of content on the slide — walk through table rows, explain each step in a process, clarify every comparison point. The viewer should fully understand the material even if they only listen.
+- **Voiceover Length:** Each voiceover should be **4-8 sentences** — long enough to properly teach the slide's content, short enough to maintain engagement. Adjust length to match the density of the slide.
+- **IMPORTANT — Avoid Fragile Visual References:** Do NOT say "as you can see on the right" or "the chart below shows" because Gamma may position elements differently. Instead, use content-based references:
+  - GOOD: "Let's walk through the three main categories..."
+  - GOOD: "If we compare these two approaches, the key differences are..."
+  - GOOD: "The first step in this process is..."
+  - GOOD: "Here's a quick breakdown of the main factors..."
   - BAD: "On the right side, you'll see a diagram of..."
   - BAD: "The graph below illustrates..."
-- Each voiceover should be 3-6 sentences — enough to thoroughly explain the slide's content without rushing or dragging
-- Connect slides narratively: end each voiceover with a subtle transition into the next topic
+  - BAD: "Looking at this image..."
+- **Transitions:** End each voiceover with a brief, natural transition that connects to the next slide's topic. Make the presentation feel like a cohesive narrative, not disconnected slides.
+- **Engagement Hooks:** Occasionally use rhetorical questions, real-world analogies, or "here's why this matters" framing to keep the listener engaged.
 
-### 4. Content Accuracy & Relevance
-- ALL information in the slides and voiceovers MUST be derived from the provided content — no hallucinated facts
-- Ensure key terms, definitions, and concepts from the source material are accurately represented
+### 4. Content Quality Standards
+- ALL information MUST be derived from the provided content — no hallucinated facts or invented statistics
+- Ensure key terms, definitions, formulas, and concepts from the source material are accurately represented
 - Cover ALL major topics from the content — don't skip important sections
+- Where the content includes numbers, data, or comparisons, present them in TABLE or structured format — not buried in paragraph text
+- Include at least one slide with a concrete example, case study, or worked problem if the content supports it
+- The final slide should provide actionable takeaways or a clear summary of what was learned
 
 **OUTPUT FORMAT — STRICT JSON COMPLIANCE:**
 You MUST output ONLY a valid JSON object. Do NOT wrap it in markdown code blocks (no \`\`\`json). Do NOT add any text before or after the JSON. The output must be directly parseable by JSON.parse().
 
 {
-  "presentation_title": "A compelling, descriptive title for the presentation",
-  "gamma_global_prompt": "Global visual style instructions for all slides (e.g., 'Premium dark theme with blue gradient accents, modern sans-serif typography, cinematic 4K imagery, clean professional layout with generous whitespace')",
+  "presentation_title": "A clear, descriptive, educational title for the presentation",
+  "gamma_global_prompt": "Clean, professional presentation style. Use a modern sans-serif font. Light or white background with a consistent accent color for headings and highlights. Prioritize readability and structure. Use built-in tables, grids, and formatted text blocks. Minimal use of stock imagery — only include images when explicitly described. Professional, academic aesthetic suitable for a university-level lecture.",
   "slides": [
     {
       "index": 1,
       "type": "title_slide",
-      "gamma_card_content": "Layout: Cinematic Title Card. Title: 'The Quantum Realm'. Subtitle: 'Unlocking the Subatomic World'. Visual: A stunning futuristic quantum particle visualization with electric blue neon lighting, 4K resolution, deep dark background with subtle particle effects. Style: Cinematic, premium, awe-inspiring.",
-      "voiceover_script": "Welcome. Today, we're diving into one of the most fascinating frontiers of modern science — the quantum realm. By the end of this, you'll understand the fundamental principles that govern the subatomic world."
+      "gamma_card_content": "Layout: Title Card with Subtitle. Title: 'Understanding Machine Learning'. Subtitle: 'From Core Concepts to Real-World Applications'. Include a brief tagline below the subtitle: 'A structured overview of how machines learn from data.' Keep the design clean with the title prominently centered. No decorative images needed — use a subtle geometric accent or solid color background.",
+      "voiceover_script": "Welcome! Today we're going to break down machine learning in a way that's clear and practical. We'll start with the fundamentals, explore the main types of learning, and look at real-world examples of how these techniques are used. By the end, you'll have a solid understanding of what machine learning is and how it works."
     },
     {
       "index": 2,
       "type": "content_slide",
-      "gamma_card_content": "Layout: Three-Column Grid with Icons. Title: 'Three Key Principles'. Column 1: 'Superposition' with brief description. Column 2: 'Entanglement' with brief description. Column 3: 'Interference' with brief description. Visual: Elegant minimalist vector icons representing each concept, consistent color scheme, clean professional style.",
-      "voiceover_script": "There are three fundamental principles that form the backbone of quantum mechanics. First, Superposition — the idea that particles can exist in multiple states simultaneously. Then there's Entanglement, where particles become mysteriously linked across any distance. And finally, Interference, which explains how quantum waves can amplify or cancel each other out. Let's explore each one..."
+      "gamma_card_content": "Layout: Comparison Table. Title: 'Three Types of Machine Learning'. Create a table with 4 columns and 4 rows. Column headers: 'Aspect', 'Supervised Learning', 'Unsupervised Learning', 'Reinforcement Learning'. Row 1 (Definition): 'Learns from labeled input-output pairs', 'Finds hidden patterns in unlabeled data', 'Learns by trial-and-error with rewards'. Row 2 (Example Use Case): 'Email spam detection', 'Customer segmentation', 'Game-playing AI'. Row 3 (Key Algorithm): 'Linear Regression, Decision Trees', 'K-Means Clustering, PCA', 'Q-Learning, Policy Gradient'. Bold the column headers and key terms in each cell. Use a subtle alternating row color for readability.",
+      "voiceover_script": "There are three main types of machine learning, and understanding the differences between them is essential. Supervised learning works with labeled data — you give the model examples with known answers, and it learns to predict outputs for new inputs. Think email spam detection. Unsupervised learning, on the other hand, works with unlabeled data — the model has to discover hidden patterns on its own, like grouping customers into segments. And then there's reinforcement learning, where an agent learns by interacting with an environment, receiving rewards or penalties. This is how game-playing AIs are trained. Let's look at each one in more detail."
+    },
+    {
+      "index": 3,
+      "type": "content_slide",
+      "gamma_card_content": "Layout: Numbered Step-by-Step Process. Title: 'How a Supervised Learning Model is Trained'. Steps: Step 1: 'Collect and Prepare Data' — Gather labeled dataset and split into training set (80%) and test set (20%). Step 2: 'Choose a Model' — Select an appropriate algorithm based on the problem type (classification or regression). Step 3: 'Train the Model' — Feed training data to the model; it adjusts internal parameters to minimize prediction errors. Step 4: 'Evaluate Performance' — Test the model on unseen test data using metrics like accuracy, precision, and recall. Step 5: 'Tune and Deploy' — Adjust hyperparameters to improve results, then deploy the model for real-world use. Use numbered circles or arrow connectors between steps. Bold the step titles.",
+      "voiceover_script": "Let's walk through the supervised learning pipeline step by step. First, you collect and prepare your data — this means gathering a labeled dataset and splitting it into a training set and a test set, typically an 80/20 split. Next, you choose a model that fits your problem — for example, a decision tree for classification tasks. Then you train the model by feeding it the training data, allowing it to learn patterns and minimize errors. After training, you evaluate its performance on the test set using metrics like accuracy and precision. Finally, you fine-tune the model's settings and deploy it into production. Each of these steps is critical for building a reliable model."
     }
   ],
-  "slideCount": 10
+  "slideCount": 3
 }
 
 **VALIDATION RULES:**
 - Output MUST be valid JSON parseable by JSON.parse()
-- "slides" array must contain 5-8 slide objects
+- "slides" array must contain 6-10 slide objects
 - Every slide must have: index (number), type (string), gamma_card_content (string), voiceover_script (string)
 - "slideCount" must equal the actual number of slides in the array
 - Slide types should be: "title_slide", "content_slide", or "summary_slide"
 - index values must be sequential starting from 1
+- At least 2 slides MUST use a table, comparison grid, or structured data format
+- At least 1 slide MUST use a step-by-step process or flowchart format
+- No gamma_card_content should request abstract, decorative, or "cinematic" AI imagery
 `;
 
   try {
