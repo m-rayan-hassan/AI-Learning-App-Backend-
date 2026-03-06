@@ -27,11 +27,16 @@ const PORT = process.env.PORT || 3000;
 // CORS - URL whitelist including frontend URLs and Google login
 // Google OAuth redirects are handled by the browser, but some client-side SDKs or
 // certain OAuth flows (like 'cross-origin' auth) require the Google domain to be whitelisted.
-const allowedOrigins = [
-  "http://localhost:3000",
-  "https://accounts.google.com",
-  ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(",") : []),
-];
+const allowedOrigins = ["http://localhost:3000", "https://accounts.google.com"];
+
+if (process.env.CLIENT_URL) {
+  // Split, trim, and remove any trailing slashes to normalize origins
+  const urls = process.env.CLIENT_URL.split(",").map((url) =>
+    url.trim().replace(/\/$/, ""),
+  );
+  allowedOrigins.push(...urls);
+}
+console.log("Allowed CORS Origins:", allowedOrigins);
 
 app.use(
   cors({
