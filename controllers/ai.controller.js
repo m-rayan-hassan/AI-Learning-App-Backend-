@@ -11,7 +11,7 @@ import { uploadMedia } from "../config/cloudinary.js";
 import fs from "fs/promises";
 import path from "path";
 import { constructGammaPrompt, startGammaGeneration, getGammaUrl } from "../utils/gammaFunctionalities.js";
-import { recordPresentation } from "../utils/recorder.js";
+import { enqueueRecording } from "../utils/recordingQueue.js";
 import { stitchAudioAndVideo } from "../utils/stitcher.js";
 
 export const generateFlashcards = async (req, res, next) => {
@@ -516,7 +516,7 @@ export const generateVideo = async (req, res, next) => {
     console.log("Gamma Url: ", gammaUrl);
     
     const audioScript = await voiceFunctionalities.generateVideoScript(videoContent, document._id);
-    const silentVidoPath = await recordPresentation(gammaUrl, audioScript, document._id);
+    const silentVidoPath = await enqueueRecording(gammaUrl, audioScript, document._id);
     finalVideoPath = await stitchAudioAndVideo(silentVidoPath, audioScript, document._id);
 
     const video = await uploadMedia(finalVideoPath, "ai-learning-app/videos");

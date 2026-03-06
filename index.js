@@ -12,7 +12,7 @@ import documentRoutes from "./routes/document.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import flashcardRoutes from "./routes/flashcard.routes.js";
 import quizRoutes from "./routes/quiz.routes.js";
-import progressRoutes from "./routes/progress.routes.js"
+import progressRoutes from "./routes/progress.routes.js";
 import { paymentWebhook } from "./controllers/payment.controller.js";
 import paymentRouter from "./routes/payment.routes.js";
 // Load environment variables
@@ -24,10 +24,33 @@ await connectDB();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS - must run before other middleware that may send responses
+// CORS - URL whitelist including frontend URLs and Google login
+// Google OAuth redirects are handled by the browser, but some client-side SDKs or
+// certain OAuth flows (like 'cross-origin' auth) require the Google domain to be whitelisted.
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://accounts.google.com",
+  ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(",") : []),
+];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin: (origin, callback) => {
+      // 1. Allow internal requests (no origin) - e.g. from the server itself or server-side scripts
+      if (!origin) return callback(null, true);
+
+      // 2. Check if the origin matches our whitelist
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // 3. Deny everyone else
+      console.error(`Blocked by CORS: ${origin}`);
+      return callback(
+        new Error("CORS: Access denied from this origin."),
+        false,
+      );
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
     allowedHeaders: [
@@ -67,7 +90,7 @@ if (process.env.NODE_ENV === "development") {
 }
 
 // Webhook
-app.post('/webhook', express.raw({ type: 'application/json' }), paymentWebhook);
+app.post("/webhook", express.raw({ type: "application/json" }), paymentWebhook);
 
 // Body Parser Middleware
 app.use(express.json({ limit: "10kb" })); // Body limit is 10kb
@@ -77,7 +100,7 @@ app.use(cookieParser());
 // API Routes
 app.get("/", (req, res) => {
   res.send("Hello");
-})
+});
 app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/flashcards", flashcardRoutes);
