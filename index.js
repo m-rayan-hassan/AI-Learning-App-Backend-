@@ -36,7 +36,7 @@ if (process.env.CLIENT_URL) {
   );
   allowedOrigins.push(...urls);
 }
-console.log("Allowed CORS Origins:", allowedOrigins);
+
 
 app.use(
   cors({
@@ -127,7 +127,7 @@ app.use((err, req, res, next) => {
   console.error(err);
   return res.status(err.statusCode || 500).json({
     status: "error",
-    message: err.message || "Internal server error",
+    message: "Something went wrong",
     ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
   });
 });
