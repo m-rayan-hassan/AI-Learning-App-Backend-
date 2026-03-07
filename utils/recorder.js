@@ -7,6 +7,23 @@ import crypto from "crypto";
 // Helper: wait ms
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Dispatch a keyboard event via JavaScript (bypasses CDP).
+ * Uses page.evaluate instead of page.keyboard.press which can timeout
+ * under memory pressure on constrained servers.
+ */
+const pressKey = async (page, key, code, keyCode) => {
+  await page.evaluate(
+    ({ key, code, keyCode }) => {
+      const opts = { key, code, keyCode, which: keyCode, bubbles: true, cancelable: true };
+      document.dispatchEvent(new KeyboardEvent("keydown", opts));
+      document.dispatchEvent(new KeyboardEvent("keypress", opts));
+      document.dispatchEvent(new KeyboardEvent("keyup", opts));
+    },
+    { key, code, keyCode },
+  );
+};
+
 export const recordPresentation = async (presentationUrl, audioData, docId) => {
   console.log(`🎥 Starting Recorder for: ${presentationUrl}`);
 
@@ -17,7 +34,7 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
       headless: false,
       turnstile: true,
       disableXvfb: false,
-      protocolTimeout: 180000,
+      protocolTimeout: 300000, // 5 min — generous timeout for constrained servers
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
@@ -33,6 +50,8 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
         "--disable-renderer-backgrounding",
         "--disable-features=TranslateUI",
         "--disable-gpu",
+        "--disable-extensions",
+        "--disable-default-apps",
         "--start-maximized",
       ],
     });
@@ -42,6 +61,14 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
 
     page.setDefaultTimeout(120000);
     page.setDefaultNavigationTimeout(120000);
+
+    // Close any extra pages/tabs puppeteer-real-browser may have opened
+    const allPages = await browser.pages();
+    for (const p of allPages) {
+      if (p !== page) {
+        await p.close().catch(() => {});
+      }
+    }
 
     await page.setViewport({
       width: 1920,
@@ -71,7 +98,7 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
     console.log("⏳ Waiting for Cloudflare verification...");
 
     let cloudflareCleared = false;
-    for (let attempt = 0; attempt < 24; attempt++) {
+    for (let attempt = 0; attempt < 30; attempt++) {
       const hasTurnstile = await page.evaluate(() => {
         const frame = document.querySelector(
           'iframe[src*="challenges.cloudflare.com"]',
@@ -92,237 +119,99 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
       }
 
       console.log(
-        `   ...Cloudflare still active (attempt ${attempt + 1}/24), waiting 5s...`,
+        `   ...Cloudflare still active (attempt ${attempt + 1}/30), waiting 3s...`,
       );
-      await sleep(5000);
+      await sleep(3000);
     }
 
     if (!cloudflareCleared) {
-      try {
-        const debugDir = path.join(process.cwd(), "temp_video");
-        if (!fs.existsSync(debugDir))
-          fs.mkdirSync(debugDir, { recursive: true });
-        await page.screenshot({
-          path: path.join(debugDir, `debug_cf_${Date.now()}.png`),
-          fullPage: true,
-        });
-      } catch (ssErr) {
-        console.warn("Could not take debug screenshot:", ssErr.message);
-      }
-      throw new Error(
-        "Cloudflare verification did not complete within 120 seconds.",
-      );
+      throw new Error("Cloudflare verification did not complete within 90 seconds.");
     }
 
     // ========== STEP 3: Wait for page to load after Cloudflare ==========
-    // After Cloudflare clears, it redirects to the actual Gamma page.
-    // DO NOT reload — that kills the in-flight page load.
-    // Instead, wait for any pending navigation (CF redirect) to complete.
     const currentUrl = page.url();
     console.log(`📍 Current URL after CF: ${currentUrl}`);
 
-    // Wait for the post-CF redirect navigation to settle
-    console.log("⏳ Waiting for post-CF navigation to complete...");
+    // Wait for any pending navigation (CF redirect) to complete
+    console.log("⏳ Waiting for post-CF navigation...");
     try {
       await page.waitForNavigation({
         waitUntil: "networkidle2",
         timeout: 30000,
       });
-      console.log("✅ Post-CF navigation completed (networkidle2).");
-    } catch (navErr) {
-      // Navigation might have already completed — that's fine
-      console.log("ℹ️ No pending navigation (page may already be loaded).");
+      console.log("✅ Post-CF navigation completed.");
+    } catch {
+      console.log("ℹ️ No pending navigation (page already loaded).");
     }
 
-    const postCfUrl = page.url();
     const pageTitle = await page.title();
-    console.log(`� URL now: ${postCfUrl}`);
-    console.log(`�📄 Page title: "${pageTitle}"`);
+    console.log(`📄 Page title: "${pageTitle}"`);
 
-    // ========== STEP 4: Wait for Gamma content to render ==========
-    console.log("⏳ Waiting for Gamma presentation to render...");
-    await sleep(5000); // Let SPA hydrate
+    // ========== STEP 4: Wait for Gamma content ==========
+    console.log("⏳ Waiting for Gamma content...");
+    await sleep(3000);
 
     let contentReady = false;
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const contentInfo = await page.evaluate(() => {
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const info = await page.evaluate(() => {
         const body = document.body;
-        if (!body)
-          return {
-            ready: false,
-            textLen: 0,
-            imgCount: 0,
-            divCount: 0,
-            title: document.title,
-          };
-
+        if (!body) return { ready: false, textLen: 0, divCount: 0 };
         const textLen = body.innerText.length;
-        const imgCount = document.querySelectorAll("img").length;
         const divCount = document.querySelectorAll("div").length;
-
-        const hasText = textLen > 100;
-        const hasDivs = divCount > 15;
-        const hasGammaContent =
+        const hasGamma =
+          !!document.querySelector('[data-block-id]') ||
           !!document.querySelector('[class*="deck"]') ||
           !!document.querySelector('[class*="slide"]') ||
           !!document.querySelector('[class*="card"]') ||
-          !!document.querySelector('[data-block-id]') ||
-          !!document.querySelector('[class*="Block"]') ||
-          !!document.querySelector("article") ||
-          !!document.querySelector('[role="presentation"]');
-
+          !!document.querySelector("article");
         return {
-          ready:
-            (hasText || imgCount > 0) &&
-            hasDivs &&
-            (hasGammaContent || textLen > 200),
+          ready: (textLen > 100 && divCount > 15) && (hasGamma || textLen > 200),
           textLen,
-          imgCount,
           divCount,
-          title: document.title,
-          hasGammaContent,
+          hasGamma,
         };
       });
 
-      if (contentInfo.ready) {
+      if (info.ready) {
         contentReady = true;
-        console.log(
-          `✅ Gamma presentation content detected! (text: ${contentInfo.textLen} chars, images: ${contentInfo.imgCount}, divs: ${contentInfo.divCount})`,
-        );
+        console.log(`✅ Content detected! (text: ${info.textLen}, divs: ${info.divCount})`);
         break;
       }
 
-      console.log(
-        `   ...Content loading (attempt ${attempt + 1}/20): text=${contentInfo.textLen}, imgs=${contentInfo.imgCount}, divs=${contentInfo.divCount}, gamma=${contentInfo.hasGammaContent}, title="${contentInfo.title}"`,
-      );
+      console.log(`   ...Loading (${attempt + 1}/12): text=${info.textLen}, divs=${info.divCount}, gamma=${info.hasGamma}`);
 
-      // After 5 failed attempts (25s), try navigating to the URL as fallback
+      // Fallback: try navigating to URL after 5 failed attempts
       if (attempt === 4) {
-        console.log("   ...Content still empty. Trying page.goto() as fallback...");
+        console.log("   ...Trying page.goto() fallback...");
         try {
-          await page.goto(presentationUrl, {
-            waitUntil: "networkidle2",
-            timeout: 30000,
-          });
-          console.log("   ✅ Fallback navigation completed.");
-          const fbTitle = await page.title();
-          console.log(`   📄 Title after fallback: "${fbTitle}"`);
-        } catch (gotoErr) {
-          console.warn("   ⚠️ Fallback goto failed:", gotoErr.message);
+          await page.goto(presentationUrl, { waitUntil: "networkidle2", timeout: 30000 });
+          console.log("   ✅ Fallback navigation done.");
+        } catch (e) {
+          console.warn("   ⚠️ Fallback failed:", e.message);
         }
-        await sleep(5000);
-        continue;
       }
 
-      // After 10 failed attempts (50s), try one more hard navigation
-      if (attempt === 9) {
-        console.log("   ...Still empty. Trying final goto with networkidle0...");
-        try {
-          await page.goto(presentationUrl, {
-            waitUntil: "networkidle0",
-            timeout: 30000,
-          });
-          console.log("   ✅ Final navigation completed.");
-        } catch (gotoErr) {
-          console.warn("   ⚠️ Final goto failed:", gotoErr.message);
-        }
-        await sleep(5000);
-        continue;
-      }
-
-      await sleep(5000);
-    }
-
-    if (!contentReady) {
-      console.warn(
-        "⚠️ Gamma content not fully detected. Taking diagnostics...",
-      );
-      try {
-        const debugDir = path.join(process.cwd(), "temp_video");
-        if (!fs.existsSync(debugDir))
-          fs.mkdirSync(debugDir, { recursive: true });
-        const ssPath = path.join(debugDir, `debug_content_${Date.now()}.png`);
-        await page.screenshot({ path: ssPath, fullPage: true });
-        console.log(`📸 Debug screenshot saved: ${ssPath}`);
-
-        // Log first 1000 chars of HTML for remote debugging
-        const html = await page.content();
-        console.log(`📄 Page HTML (first 1000 chars):\n${html.substring(0, 1000)}`);
-
-        const htmlPath = path.join(
-          debugDir,
-          `debug_content_${Date.now()}.html`,
-        );
-        fs.writeFileSync(htmlPath, html);
-        console.log(`📄 Full debug HTML saved: ${htmlPath}`);
-      } catch (ssErr) {
-        console.warn("Could not take diagnostics:", ssErr.message);
-      }
-      console.log("⏳ Proceeding with extra 10s buffer...");
-      await sleep(10000);
-    }
-
-    // Extra render buffer
-    await sleep(3000);
-
-    // ========== STEP 5: Enter Presentation Mode ==========
-    console.log("🎬 Entering presentation mode...");
-    try {
-      await page.click("body").catch(() => {});
-      await sleep(2000);
-
-      const presentClicked = await page.evaluate(() => {
-        const selectors = [
-          'button[aria-label*="resent"]',
-          'button[aria-label*="Play"]',
-          '[data-testid*="present"]',
-          'button[class*="present"]',
-          'a[href*="present"]',
-        ];
-        for (const sel of selectors) {
-          const btn = document.querySelector(sel);
-          if (btn) {
-            btn.click();
-            return sel;
-          }
-        }
-        const buttons = document.querySelectorAll("button");
-        for (const btn of buttons) {
-          if (btn.textContent.trim().toLowerCase().includes("present")) {
-            btn.click();
-            return "text:present";
-          }
-        }
-        return null;
-      });
-
-      if (presentClicked) {
-        console.log(
-          `✅ Clicked 'Present' button (selector: ${presentClicked}).`,
-        );
-        await sleep(5000);
-      } else {
-        console.log("⚠️ Present button not found, using keyboard shortcut...");
-        await page.keyboard.down("Control");
-        await page.keyboard.down("Shift");
-        await page.keyboard.press("Enter");
-        await page.keyboard.up("Shift");
-        await page.keyboard.up("Control");
-        await sleep(5000);
-        console.log("✅ Keyboard shortcut sent.");
-      }
-    } catch (e) {
-      console.warn("⚠️ Presentation mode entry warning:", e.message);
       await sleep(3000);
     }
 
-    // ========== STEP 6: Record ==========
+    if (!contentReady) {
+      console.warn("⚠️ Content not detected, proceeding anyway with extra wait...");
+      await sleep(10000);
+    }
+
+    await sleep(3000); // Final render buffer
+
+    // ========== STEP 5: Start recorder BEFORE presentation mode ==========
+    // Starting the recorder here (before Present) ensures the CDP session
+    // is created while the page is in a stable state, avoiding
+    // Target.attachToTarget timeouts during page transitions.
+    console.log("🎬 Initializing recorder...");
     const recorder = new PuppeteerScreenRecorder(page, {
       followNewTab: false,
-      fps: 60,
+      fps: 25,          // Reduced from 60 — saves significant CPU/memory
       ffmpeg_Path: "/usr/bin/ffmpeg",
       videoFrame: { width: 1920, height: 1080 },
-      videoCrf: 18,
+      videoCrf: 23,     // Balanced quality vs encoding overhead
       aspectRatio: "16:9",
     });
 
@@ -335,9 +224,53 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
     );
 
     await recorder.start(outputVideoPath);
-    console.log("🔴 Recording Started (60 FPS)...");
+    console.log("🔴 Recording started (25 FPS).");
+
+    // ========== STEP 6: Enter Presentation Mode ==========
+    console.log("🎬 Entering presentation mode...");
+    try {
+      await page.click("body").catch(() => {});
+      await sleep(1000);
+
+      const presentClicked = await page.evaluate(() => {
+        const selectors = [
+          'button[aria-label*="resent"]',
+          'button[aria-label*="Play"]',
+          '[data-testid*="present"]',
+          'button[class*="present"]',
+          'a[href*="present"]',
+        ];
+        for (const sel of selectors) {
+          const btn = document.querySelector(sel);
+          if (btn) { btn.click(); return sel; }
+        }
+        const buttons = document.querySelectorAll("button");
+        for (const btn of buttons) {
+          if (btn.textContent.trim().toLowerCase().includes("present")) {
+            btn.click();
+            return "text:present";
+          }
+        }
+        return null;
+      });
+
+      if (presentClicked) {
+        console.log(`✅ Clicked Present (${presentClicked}).`);
+      } else {
+        // Fallback: JavaScript keyboard event (no CDP)
+        console.log("⚠️ Present button not found, using JS keyboard event...");
+        await pressKey(page, "Enter", "Enter", 13);
+      }
+      await sleep(5000); // Wait for presentation mode transition
+    } catch (e) {
+      console.warn("⚠️ Presentation mode warning:", e.message);
+      await sleep(3000);
+    }
 
     // ========== STEP 7: Slide Navigation Loop ==========
+    // Uses JavaScript keyboard events (page.evaluate) instead of CDP
+    // page.keyboard.press which causes Input.dispatchKeyEvent timeouts.
+    console.log("▶️ Starting slide navigation...");
     for (let i = 0; i < audioData.length; i++) {
       const slideAudio = audioData[i];
       console.log(`👉 Slide ${i + 1}: ${slideAudio.duration}s`);
@@ -347,7 +280,7 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
 
       if (i < audioData.length - 1) {
         console.log("   ➡️ Next Slide");
-        await page.keyboard.press("ArrowRight");
+        await pressKey(page, "ArrowRight", "ArrowRight", 39);
         await sleep(1500);
       }
     }
@@ -362,7 +295,7 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
     if (browser) {
       try {
         await browser.close();
-        console.log("🧹 Browser closed, memory freed.");
+        console.log("🧹 Browser closed.");
       } catch (closeErr) {
         console.error("Failed to close browser:", closeErr);
       }
