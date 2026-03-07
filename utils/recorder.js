@@ -16,8 +16,6 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
     const response = await connect({
       headless: false,
       turnstile: true,
-      // Let puppeteer-real-browser manage its own Xvfb display.
-      // Do NOT set disableXvfb: true — that caused display issues in Docker.
       disableXvfb: false,
       protocolTimeout: 180000,
       args: [
@@ -27,8 +25,6 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
         "--window-size=1920,1200",
         "--force-device-scale-factor=1",
         "--hide-scrollbars",
-        "--use-gl=swiftshader",
-        "--enable-webgl",
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-infobars",
@@ -36,6 +32,7 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
         "--disable-backgrounding-occluded-windows",
         "--disable-renderer-backgrounding",
         "--disable-features=TranslateUI",
+        "--disable-gpu",
         "--start-maximized",
       ],
     });
@@ -51,20 +48,6 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
       height: 1080,
       deviceScaleFactor: 1,
     });
-
-    // Force exact viewport via CDP — ensures 1920x1080 even in headed mode
-    // where browser chrome can shrink the viewport.
-    try {
-      const cdpSession = await page.target().createCDPSession();
-      await cdpSession.send('Emulation.setDeviceMetricsOverride', {
-        width: 1920,
-        height: 1080,
-        deviceScaleFactor: 1,
-        mobile: false,
-      });
-    } catch (cdpErr) {
-      console.warn('⚠️ CDP viewport override failed (non-critical):', cdpErr.message);
-    }
 
     await page.evaluateOnNewDocument(() => {
       Object.defineProperty(window, "devicePixelRatio", {
@@ -85,8 +68,6 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
     console.log("✅ DOM content loaded.");
 
     // ========== STEP 2: Handle Cloudflare ==========
-    // puppeteer-real-browser with turnstile: true handles the Turnstile checkbox.
-    // We wait for the challenge page to disappear.
     console.log("⏳ Waiting for Cloudflare verification...");
 
     let cloudflareCleared = false;
@@ -117,7 +98,6 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
     }
 
     if (!cloudflareCleared) {
-      // Take debug screenshot before throwing
       try {
         const debugDir = path.join(process.cwd(), "temp_video");
         if (!fs.existsSync(debugDir))
@@ -134,39 +114,37 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
       );
     }
 
-    // ========== STEP 3: RELOAD after Cloudflare ==========
-    // CRITICAL FIX: After Cloudflare clears via redirect, the page is in a
-    // partially-loaded state. We MUST reload with networkidle2 to ensure
-    // Gamma's React SPA fully renders — fetching API data, hydrating, etc.
-    console.log("🔄 Reloading page with networkidle2 to ensure full SPA render...");
-    await sleep(2000); // Brief settle after CF redirect
+    // ========== STEP 3: Wait for page to load after Cloudflare ==========
+    // After Cloudflare clears, it redirects to the actual Gamma page.
+    // DO NOT reload — that kills the in-flight page load.
+    // Instead, wait for any pending navigation (CF redirect) to complete.
+    const currentUrl = page.url();
+    console.log(`📍 Current URL after CF: ${currentUrl}`);
 
+    // Wait for the post-CF redirect navigation to settle
+    console.log("⏳ Waiting for post-CF navigation to complete...");
     try {
-      await page.reload({
+      await page.waitForNavigation({
         waitUntil: "networkidle2",
-        timeout: 60000,
+        timeout: 30000,
       });
-      console.log("✅ Page reloaded with networkidle2.");
-    } catch (reloadErr) {
-      console.warn("⚠️ Reload timeout, trying goto instead...");
-      // Fallback: navigate directly (cookies are already set from CF pass)
-      await page.goto(presentationUrl, {
-        waitUntil: "networkidle2",
-        timeout: 60000,
-      });
-      console.log("✅ Page navigated with networkidle2.");
+      console.log("✅ Post-CF navigation completed (networkidle2).");
+    } catch (navErr) {
+      // Navigation might have already completed — that's fine
+      console.log("ℹ️ No pending navigation (page may already be loaded).");
     }
 
-    // Log the page title for debugging
+    const postCfUrl = page.url();
     const pageTitle = await page.title();
-    console.log(`📄 Page title: "${pageTitle}"`);
+    console.log(`� URL now: ${postCfUrl}`);
+    console.log(`�📄 Page title: "${pageTitle}"`);
 
-    // ========== STEP 4: Wait for Gamma content to fully render ==========
+    // ========== STEP 4: Wait for Gamma content to render ==========
     console.log("⏳ Waiting for Gamma presentation to render...");
-    await sleep(3000); // Initial settle time
+    await sleep(5000); // Let SPA hydrate
 
     let contentReady = false;
-    for (let attempt = 0; attempt < 15; attempt++) {
+    for (let attempt = 0; attempt < 20; attempt++) {
       const contentInfo = await page.evaluate(() => {
         const body = document.body;
         if (!body)
@@ -182,10 +160,8 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
         const imgCount = document.querySelectorAll("img").length;
         const divCount = document.querySelectorAll("div").length;
 
-        // Gamma presentations have substantial content when loaded
         const hasText = textLen > 100;
         const hasDivs = divCount > 15;
-        // Check for common Gamma content indicators
         const hasGammaContent =
           !!document.querySelector('[class*="deck"]') ||
           !!document.querySelector('[class*="slide"]') ||
@@ -217,23 +193,49 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
       }
 
       console.log(
-        `   ...Content loading (attempt ${attempt + 1}/15): text=${contentInfo.textLen}, imgs=${contentInfo.imgCount}, divs=${contentInfo.divCount}, gamma=${contentInfo.hasGammaContent}, title="${contentInfo.title}"`,
+        `   ...Content loading (attempt ${attempt + 1}/20): text=${contentInfo.textLen}, imgs=${contentInfo.imgCount}, divs=${contentInfo.divCount}, gamma=${contentInfo.hasGammaContent}, title="${contentInfo.title}"`,
       );
 
-      // On attempt 5, try waiting for network idle (stricter)
+      // After 5 failed attempts (25s), try navigating to the URL as fallback
       if (attempt === 4) {
-        console.log("   ...Trying waitForNetworkIdle...");
-        await page
-          .waitForNetworkIdle({ idleTime: 2000, timeout: 15000 })
-          .catch(() => {});
+        console.log("   ...Content still empty. Trying page.goto() as fallback...");
+        try {
+          await page.goto(presentationUrl, {
+            waitUntil: "networkidle2",
+            timeout: 30000,
+          });
+          console.log("   ✅ Fallback navigation completed.");
+          const fbTitle = await page.title();
+          console.log(`   📄 Title after fallback: "${fbTitle}"`);
+        } catch (gotoErr) {
+          console.warn("   ⚠️ Fallback goto failed:", gotoErr.message);
+        }
+        await sleep(5000);
+        continue;
       }
 
-      await sleep(3000);
+      // After 10 failed attempts (50s), try one more hard navigation
+      if (attempt === 9) {
+        console.log("   ...Still empty. Trying final goto with networkidle0...");
+        try {
+          await page.goto(presentationUrl, {
+            waitUntil: "networkidle0",
+            timeout: 30000,
+          });
+          console.log("   ✅ Final navigation completed.");
+        } catch (gotoErr) {
+          console.warn("   ⚠️ Final goto failed:", gotoErr.message);
+        }
+        await sleep(5000);
+        continue;
+      }
+
+      await sleep(5000);
     }
 
     if (!contentReady) {
       console.warn(
-        "⚠️ Gamma content not fully detected after retries. Taking debug screenshot...",
+        "⚠️ Gamma content not fully detected. Taking diagnostics...",
       );
       try {
         const debugDir = path.join(process.cwd(), "temp_video");
@@ -243,21 +245,24 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
         await page.screenshot({ path: ssPath, fullPage: true });
         console.log(`📸 Debug screenshot saved: ${ssPath}`);
 
+        // Log first 1000 chars of HTML for remote debugging
         const html = await page.content();
+        console.log(`📄 Page HTML (first 1000 chars):\n${html.substring(0, 1000)}`);
+
         const htmlPath = path.join(
           debugDir,
           `debug_content_${Date.now()}.html`,
         );
         fs.writeFileSync(htmlPath, html);
-        console.log(`📄 Debug HTML saved: ${htmlPath}`);
+        console.log(`📄 Full debug HTML saved: ${htmlPath}`);
       } catch (ssErr) {
-        console.warn("Could not take debug screenshot:", ssErr.message);
+        console.warn("Could not take diagnostics:", ssErr.message);
       }
       console.log("⏳ Proceeding with extra 10s buffer...");
       await sleep(10000);
     }
 
-    // Extra render buffer — let animations, fonts, and images finish loading
+    // Extra render buffer
     await sleep(3000);
 
     // ========== STEP 5: Enter Presentation Mode ==========
