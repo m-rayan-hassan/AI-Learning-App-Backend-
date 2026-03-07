@@ -57,5 +57,5 @@ RUN mkdir -p uploads temp_audio temp_video public/videos
 EXPOSE 3000
 
 # Start Xvfb virtual display in the background, set DISPLAY, then start Node.js.
-# This prevents xvfb-run from masking Node's port binding from Render's health checks.
-CMD Xvfb :99 -screen 0 1920x1080x24 -ac & export DISPLAY=:99 && node index.js
+# Remove stale lock files first to prevent "Server is already active" errors on restart.
+CMD rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 && Xvfb :99 -screen 0 1920x1080x24 -ac & export DISPLAY=:99 && node index.js
