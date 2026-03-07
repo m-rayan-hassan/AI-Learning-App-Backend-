@@ -7,22 +7,20 @@ import crypto from "crypto";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Dispatch a keyboard event via JS (bypasses CDP protocol).
+ * Dispatch keyboard event safely via CDP (lowest memory overhead).
+ * Doesn't require V8 JS execution context like page.evaluate does,
+ * which prevents Runtime.callFunctionOn timeouts during OOM thrashing.
  */
-const pressKey = async (page, key, code, keyCode) => {
-  await page.evaluate(
-    ({ key, code, keyCode }) => {
-      const opts = { key, code, keyCode, which: keyCode, bubbles: true, cancelable: true };
-      document.dispatchEvent(new KeyboardEvent("keydown", opts));
-      document.dispatchEvent(new KeyboardEvent("keypress", opts));
-      document.dispatchEvent(new KeyboardEvent("keyup", opts));
-    },
-    { key, code, keyCode },
-  );
+const pressKeyCDP = async (page, keyName) => {
+  try {
+    await page.keyboard.press(keyName);
+  } catch (e) {
+    console.warn(`⚠️ Key press failed (${keyName}):`, e.message);
+  }
 };
 
 export const recordPresentation = async (presentationUrl, audioData, docId) => {
-  console.log(`🎥 Starting Recorder for: ${presentationUrl}`);
+  console.log(`🎥 Starting Recorder for: ${presentationUrl} (Low Memory Mode)`);
 
   let browser = null;
 
@@ -33,25 +31,31 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
       disableXvfb: false,
       protocolTimeout: 300000,
       args: [
+        // Core stealth & isolation
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
-        "--window-size=1920,1200",
-        "--force-device-scale-factor=1",
-        "--hide-scrollbars",
+        // Maximize memory savings (Crucial for 1GB RAM limits like Railway)
+        "--disable-site-isolation-trials",
+        "--memory-pressure-off",
+        "--js-flags=--expose-gc",
+        "--disable-gpu",
+        "--disable-software-rasterizer",
         "--use-gl=swiftshader",
         "--enable-webgl",
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-infobars",
+        // Disable unnecessary features
+        "--disable-extensions",
+        "--disable-default-apps",
+        "--disable-sync",
+        "--disable-translate",
+        "--disable-background-networking",
         "--disable-background-timer-throttling",
         "--disable-backgrounding-occluded-windows",
         "--disable-renderer-backgrounding",
-        "--disable-features=TranslateUI",
-        "--disable-gpu",
-        "--disable-extensions",
-        "--disable-default-apps",
-        "--start-maximized",
+        "--disable-infobars",
+        "--hide-scrollbars",
+        // Set window to 720p + chrome allowance
+        "--window-size=1280,800",
       ],
     });
 
@@ -61,7 +65,7 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
     cfPage.setDefaultTimeout(120000);
     cfPage.setDefaultNavigationTimeout(120000);
 
-    // ========== STEP 1: Solve Cloudflare on the initial page ==========
+    // ========== STEP 1: Solve Cloudflare (Memory Optimized) ==========
     console.log("🌐 Navigating to solve Cloudflare...");
     await cfPage.goto(presentationUrl, {
       waitUntil: "domcontentloaded",
@@ -79,123 +83,89 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
           document.title.toLowerCase().includes("just a moment") ||
           document.title.toLowerCase().includes("attention required");
         return !!(frame || container || isChallengePage);
-      });
+      }).catch(() => false);
 
       if (!hasTurnstile) {
         cloudflareCleared = true;
         console.log("✅ Cloudflare verification passed!");
         break;
       }
-
-      console.log(`   ...Cloudflare still active (attempt ${attempt + 1}/30), waiting 3s...`);
       await sleep(3000);
     }
 
-    if (!cloudflareCleared) {
-      throw new Error("Cloudflare verification did not complete within 90 seconds.");
-    }
+    if (!cloudflareCleared) throw new Error("Cloudflare timeout");
 
-    // ========== STEP 2: Open a FRESH tab and navigate ==========
-    // The CF page has contaminated DOM/JS state (Turnstile scripts, challenge
-    // remnants) that prevents Gamma's React SPA from properly mounting.
-    // A new tab inherits the cf_clearance cookie but starts with a clean context.
-    console.log("� Opening fresh tab with clean JS context...");
+    // ========== STEP 2: Open a FRESH tab  ==========
+    console.log("🔄 Opening fresh tab and killing CF page to free memory...");
     const page = await browser.newPage();
 
-    // Close the CF page — free memory
+    // Kill CF page instantly
     await cfPage.close().catch(() => {});
-    console.log("✅ CF page closed, memory freed.");
-
-    // Close any other extra pages
+    
+    // Kill any background pages
     const allPages = await browser.pages();
     for (const p of allPages) {
       if (p !== page) await p.close().catch(() => {});
     }
 
-    // Configure the fresh page
     page.setDefaultTimeout(120000);
     page.setDefaultNavigationTimeout(120000);
 
-    await page.setViewport({
-      width: 1920,
-      height: 1080,
-      deviceScaleFactor: 1,
-    });
+    // Drop to 720p viewport — reduces memory for rendering and recording by ~50%
+    await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
 
     await page.evaluateOnNewDocument(() => {
       Object.defineProperty(window, "devicePixelRatio", { get: () => 1 });
     });
 
-    await page.emulateMediaFeatures([
-      { name: "prefers-reduced-motion", value: "no-preference" },
-    ]);
-
-    // Log JS errors for debugging
     page.on("console", (msg) => {
-      if (msg.type() === "error") {
-        console.log(`🔴 JS Console Error: ${msg.text()}`);
-      }
-    });
-    page.on("pageerror", (err) => {
-      console.log(`🔴 Page Error: ${err.message}`);
+      if (msg.type() === "error") console.log(`🔴 JS Error: ${msg.text()}`);
     });
 
-    // Navigate to the presentation on the clean page
+    // Navigate to presentation
     console.log("🌐 Loading presentation on fresh page...");
     await page.goto(presentationUrl, {
       waitUntil: "domcontentloaded",
-      timeout: 30000,
+      timeout: 60000,
     });
-
-    const pageTitle = await page.title();
-    const pageUrl = page.url();
-    console.log(`📄 Page title: "${pageTitle}"`);
-    console.log(`📍 URL: ${pageUrl}`);
 
     // ========== STEP 3: Wait for Gamma content ==========
     console.log("⏳ Waiting for Gamma content...");
-    await sleep(5000); // Let SPA hydrate
+    await sleep(5000);
 
     let contentReady = false;
     for (let attempt = 0; attempt < 12; attempt++) {
       const info = await page.evaluate(() => {
-        const body = document.body;
-        if (!body) return { ready: false, textLen: 0, divCount: 0 };
-        const textLen = body.innerText.length;
+        if (!document.body) return { ready: false };
+        const textLen = document.body.innerText.length;
         const divCount = document.querySelectorAll("div").length;
-        const hasGamma =
-          !!document.querySelector("[data-block-id]") ||
-          !!document.querySelector('[class*="deck"]') ||
-          !!document.querySelector('[class*="slide"]') ||
-          !!document.querySelector('[class*="card"]') ||
-          !!document.querySelector("article");
-        return {
-          ready: (textLen > 100 && divCount > 15) && (hasGamma || textLen > 200),
-          textLen,
-          divCount,
-          hasGamma,
-        };
-      });
+        const hasGamma = !!document.querySelector("[data-block-id], [class*='deck'], [class*='slide'], article");
+        return { ready: (textLen > 100 && divCount > 15) && (hasGamma || textLen > 200), textLen, divCount, title: document.title };
+      }).catch(() => ({ ready: false, textLen: 0, divCount: 0, title: 'Error' }));
+
+      console.log(`   ...Loading (${attempt + 1}/12): text=${info.textLen}, divs=${info.divCount}, title="${info.title}"`);
 
       if (info.ready) {
         contentReady = true;
         console.log(`✅ Content detected! (text: ${info.textLen}, divs: ${info.divCount})`);
         break;
       }
-
-      console.log(`   ...Loading (${attempt + 1}/12): text=${info.textLen}, divs=${info.divCount}, gamma=${info.hasGamma}`);
       await sleep(5000);
     }
 
     if (!contentReady) {
-      console.warn("⚠️ Content not detected, proceeding with extra wait...");
-      // Log a snippet of the HTML for remote debugging
-      const html = await page.content();
-      console.log(`📄 HTML snippet (first 500 chars):\n${html.substring(0, 500)}`);
+      console.warn("⚠️ Content wait timeout, proceeding anyway...");
+      try {
+        const html = await page.content();
+        console.log(`📄 HTML snippet (1000 chars):\n${html.substring(0, 1000)}`);
+        const ssPath = path.join(process.cwd(), "temp_video", `debug_local_${Date.now()}.png`);
+        await page.screenshot({ path: ssPath, fullPage: true });
+        console.log(`📸 Saved screenshot to ${ssPath}`);
+      } catch (e) {}
       await sleep(10000);
     }
 
-    await sleep(3000); // Final render buffer
+    await sleep(3000);
 
     // ========== STEP 4: Enter Presentation Mode ==========
     console.log("🎬 Entering presentation mode...");
@@ -203,61 +173,46 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
       await page.click("body").catch(() => {});
       await sleep(1000);
 
-      const presentClicked = await page.evaluate(() => {
-        const selectors = [
-          'button[aria-label*="resent"]',
-          'button[aria-label*="Play"]',
-          '[data-testid*="present"]',
-          'button[class*="present"]',
-          'a[href*="present"]',
-        ];
-        for (const sel of selectors) {
-          const btn = document.querySelector(sel);
-          if (btn) { btn.click(); return sel; }
-        }
-        const buttons = document.querySelectorAll("button");
-        for (const btn of buttons) {
-          if (btn.textContent.trim().toLowerCase().includes("present")) {
-            btn.click();
-            return "text:present";
-          }
-        }
-        return null;
-      });
+      const presentBtn = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll("button, a"));
+        const btn = btns.find(b => 
+          (b.getAttribute('aria-label') || '').toLowerCase().includes('resent') ||
+          (b.textContent || '').toLowerCase().includes('present')
+        );
+        if (btn) { btn.click(); return true; }
+        return false;
+      }).catch(() => false);
 
-      if (presentClicked) {
-        console.log(`✅ Clicked Present (${presentClicked}).`);
+      if (presentBtn) {
+        console.log("✅ Clicked Present button.");
       } else {
-        console.log("⚠️ Present button not found, trying keyboard shortcut...");
-        await pressKey(page, "Enter", "Enter", 13);
+        console.log("⚠️ Present button not found, using keyboard fallback...");
+        await pressKeyCDP(page, "Enter");
       }
       await sleep(5000);
     } catch (e) {
-      console.warn("⚠️ Presentation mode warning:", e.message);
-      await sleep(3000);
+      console.warn("⚠️ Present mode entry failed:", e.message);
     }
 
-    // ========== STEP 5: Start recorder AFTER presentation mode ==========
-    console.log("🎬 Initializing recorder...");
+    // ========== STEP 5: Start recorder (720p Optimized) ==========
+    console.log("🎬 Initializing recorder at 720p 24FPS to save memory...");
     const recorder = new PuppeteerScreenRecorder(page, {
       followNewTab: false,
-      fps: 25,
+      fps: 24, // Standard cinematic, uses less mem than 25/30
       ffmpeg_Path: "/usr/bin/ffmpeg",
-      videoFrame: { width: 1920, height: 1080 },
-      videoCrf: 23,
+      videoFrame: { width: 1280, height: 720 }, // Down from 1080p -> saves ~55% memory
+      videoCrf: 28, // Lower quality, higher compression (saves RAM during encode)
       aspectRatio: "16:9",
+      recordDurationLimit: 600 // 10 min hard limit
     });
 
     const uniqueId = crypto.randomUUID().slice(0, 8);
     const tempDir = path.join(process.cwd(), "temp_video", docId.toString());
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-    const outputVideoPath = path.join(
-      tempDir,
-      `silent_${docId}_${Date.now()}_${uniqueId}.mp4`,
-    );
+    const outputVideoPath = path.join(tempDir, `silent_${docId}_${Date.now()}_${uniqueId}.mp4`);
 
     await recorder.start(outputVideoPath);
-    console.log("🔴 Recording started (25 FPS).");
+    console.log("🔴 Recording started.");
 
     // ========== STEP 6: Slide Navigation ==========
     console.log("▶️ Starting slide navigation...");
@@ -270,7 +225,7 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
 
       if (i < audioData.length - 1) {
         console.log("   ➡️ Next Slide");
-        await pressKey(page, "ArrowRight", "ArrowRight", 39);
+        await pressKeyCDP(page, "ArrowRight");
         await sleep(1500);
       }
     }
@@ -278,16 +233,16 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
     await sleep(2000);
 
     await recorder.stop();
-    console.log("✅ Recording complete:", outputVideoPath);
+    console.log("✅ Recording complete.");
 
     return outputVideoPath;
   } finally {
     if (browser) {
       try {
         await browser.close();
-        console.log("🧹 Browser closed.");
-      } catch (closeErr) {
-        console.error("Failed to close browser:", closeErr);
+        console.log("🧹 Browser closed, memory freed.");
+      } catch (e) {
+        console.error("Failed to close browser:", e.message);
       }
     }
   }
