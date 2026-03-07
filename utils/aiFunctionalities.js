@@ -473,7 +473,8 @@ export const generateVoiceOverviewScript = async (content) => {
 - The output should be pure spoken-word text, ready to be fed directly into a text-to-speech engine
 
 **Input Content:**
-${content}`;
+${content}
+`;
 
   try {
     const response = await ai.models.generateContent({

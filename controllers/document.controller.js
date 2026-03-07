@@ -10,7 +10,6 @@ import { deleteMedia } from "../config/cloudinary.js";
 import { getFileInfo } from "../utils/getFileInfo.js";
 import * as aiFunctionalities from "../utils/aiFunctionalities.js"
 import VoiceOverview from "../models/VoiceOverview.model.js";
-import PodcastOverview from "../models/PodcastOverview.model.js";
 import VideoOverview from "../models/VideoOverview.model.js";
 
 // Upload Document Controller
@@ -318,11 +317,6 @@ export const deleteDocument = async (req, res, next) => {
       userId: req.user._id
     }).select("publicId");
 
-    const podcastPublicId = await PodcastOverview.findOne({
-      documentId: document._id,
-      userId: req.user._id
-    }).select("publicId");
-
     const videoPublicId = await VideoOverview.findOne({
       documentId: document._id,
       userId: req.user._id
@@ -343,7 +337,6 @@ export const deleteDocument = async (req, res, next) => {
     await Quiz.deleteMany({documentId: document._id});
     await ChatHistory.deleteMany({documentId: document._id});
     await VoiceOverview.deleteOne({documentId: document._id});
-    await PodcastOverview.deleteOne({documentId: document._id});
     await VideoOverview.deleteOne({documentId: document._id});
 
     await document.deleteOne();

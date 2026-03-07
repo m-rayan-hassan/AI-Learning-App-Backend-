@@ -11,6 +11,12 @@ const voiceSchema = new mongoose.Schema({
     ref: "Document",
     required: true,
   },
+  type: {
+    type: String,
+    required: true,
+    enum: ["voice", "podcast"],
+    default: "voice"
+  },
   publicId: {
     type: String,
     required: true,

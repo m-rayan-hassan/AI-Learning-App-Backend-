@@ -3,14 +3,17 @@ import Flashcard from "../models/Flashcard.model.js";
 import Quiz from "../models/Quiz.model.js";
 import ChatHistory from "../models/ChatHistory.model.js";
 import VoiceOverview from "../models/VoiceOverview.model.js";
-import PodcastOverview from "../models/PodcastOverview.model.js";
 import VideoOverview from "../models/VideoOverview.model.js";
 import * as aiFunctionalities from "../utils/aiFunctionalities.js";
 import * as voiceFunctionalities from "../utils/voiceFunctionalities.js";
 import { uploadMedia } from "../config/cloudinary.js";
 import fs from "fs/promises";
 import path from "path";
-import { constructGammaPrompt, startGammaGeneration, getGammaUrl } from "../utils/gammaFunctionalities.js";
+import {
+  constructGammaPrompt,
+  startGammaGeneration,
+  getGammaUrl,
+} from "../utils/gammaFunctionalities.js";
 import { enqueueRecording } from "../utils/recordingQueue.js";
 import { stitchAudioAndVideo } from "../utils/stitcher.js";
 
@@ -358,8 +361,10 @@ export const generateVoiceOverview = async (req, res, next) => {
     const voiceScript =
       await aiFunctionalities.generateVoiceOverviewScript(content);
 
-    voiceOverviewFilePath =
-      await voiceFunctionalities.generateVoice(voiceScript, document._id);
+    voiceOverviewFilePath = await voiceFunctionalities.generateVoice(
+      voiceScript,
+      document._id,
+    );
 
     const voiceOverview = await uploadMedia(
       voiceOverviewFilePath,
@@ -370,9 +375,10 @@ export const generateVoiceOverview = async (req, res, next) => {
 
     await VoiceOverview.create({
       documentId: document._id,
-      userId: req.user._id, // Fixed typo req.user_id
+      userId: req.user._id,
+      type: "voice",
       publicId: voiceOverview.public_id,
-      secureUrl: voiceOverviewUrl 
+      secureUrl: voiceOverviewUrl,
     });
 
     res.status(200).json({
@@ -431,8 +437,10 @@ export const generatePodcast = async (req, res, next) => {
       voice_id2,
     );
 
-    podcastFilePath =
-      await voiceFunctionalities.generatePodcast(podcastScript, document._id);
+    podcastFilePath = await voiceFunctionalities.generatePodcast(
+      podcastScript,
+      document._id,
+    );
 
     const podcast = await uploadMedia(
       podcastFilePath,
@@ -441,11 +449,12 @@ export const generatePodcast = async (req, res, next) => {
 
     const podcastUrl = podcast.secure_url;
 
-    await PodcastOverview.create({
+    await VoiceOverview.create({
       documentId: document._id,
       userId: req.user._id,
+      type: "podcast",
       publicId: podcast.public_id,
-      secureUrl: podcastUrl
+      secureUrl: podcastUrl,
     });
 
     res.status(200).json({
@@ -471,7 +480,7 @@ export const generateVideo = async (req, res, next) => {
   let tempAudioDir = null;
   let tempVideoDir = null;
   let document_id_var = null; // Storing to use in finally block
-  
+
   try {
     const { documentId } = req.body;
     document_id_var = documentId;
@@ -498,74 +507,109 @@ export const generateVideo = async (req, res, next) => {
       });
     }
 
-    tempAudioDir = path.join(process.cwd(), "temp_audio", document._id.toString());
-    tempVideoDir = path.join(process.cwd(), "temp_video", document._id.toString());
+    tempAudioDir = path.join(
+      process.cwd(),
+      "temp_audio",
+      document._id.toString(),
+    );
+    tempVideoDir = path.join(
+      process.cwd(),
+      "temp_video",
+      document._id.toString(),
+    );
 
     const content = document.extractedText;
     const videoContent = await aiFunctionalities.generateVideoContent(content);
     console.log("Video content", videoContent);
-    
+
     const slideCount = videoContent.slideCount;
 
     const gammaPrompt = constructGammaPrompt(videoContent);
     const gammaId = await startGammaGeneration(gammaPrompt, slideCount);
 
     console.log("Gamma ID: ", gammaId);
-    
+
     const gammaUrl = await getGammaUrl(gammaId);
     console.log("Gamma Url: ", gammaUrl);
-    
-    const audioScript = await voiceFunctionalities.generateVideoScript(videoContent, document._id);
-    const silentVidoPath = await enqueueRecording(gammaUrl, audioScript, document._id);
-    finalVideoPath = await stitchAudioAndVideo(silentVidoPath, audioScript, document._id);
+
+    const audioScript = await voiceFunctionalities.generateVideoScript(
+      videoContent,
+      document._id,
+    );
+    const silentVidoPath = await enqueueRecording(
+      gammaUrl,
+      audioScript,
+      document._id,
+    );
+    finalVideoPath = await stitchAudioAndVideo(
+      silentVidoPath,
+      audioScript,
+      document._id,
+    );
 
     const video = await uploadMedia(finalVideoPath, "ai-learning-app/videos");
 
     const videoUrl = video.secure_url;
     console.log("Video Url: ", videoUrl);
-    
+
     await VideoOverview.create({
       documentId: document._id,
       userId: req.user._id,
       publicId: video.public_id,
-      secureUrl: videoUrl
-    })
+      secureUrl: videoUrl,
+    });
 
     return res.status(200).json({
       success: true,
       message: "Video generated successfully",
-      data: videoUrl
-    })
-    
+      data: videoUrl,
+    });
   } catch (error) {
     next(error);
   } finally {
     try {
-      if (finalVideoPath && await fs.stat(path.resolve(finalVideoPath)).then(() => true).catch(() => false)) {
+      if (
+        finalVideoPath &&
+        (await fs
+          .stat(path.resolve(finalVideoPath))
+          .then(() => true)
+          .catch(() => false))
+      ) {
         await fs.unlink(path.resolve(finalVideoPath));
       }
     } catch (err) {
       console.error("Failed to clean up final video path:", err);
     }
-    
+
     try {
-      if (tempAudioDir && await fs.stat(tempAudioDir).then(() => true).catch(() => false)) {
+      if (
+        tempAudioDir &&
+        (await fs
+          .stat(tempAudioDir)
+          .then(() => true)
+          .catch(() => false))
+      ) {
         await fs.rm(tempAudioDir, { recursive: true, force: true });
       }
     } catch (err) {
-       console.error("Failed to clean up temp audio dir:", err);
+      console.error("Failed to clean up temp audio dir:", err);
     }
-    
+
     try {
-      if (tempVideoDir && await fs.stat(tempVideoDir).then(() => true).catch(() => false)) {
+      if (
+        tempVideoDir &&
+        (await fs
+          .stat(tempVideoDir)
+          .then(() => true)
+          .catch(() => false))
+      ) {
         await fs.rm(tempVideoDir, { recursive: true, force: true });
       }
     } catch (err) {
-       console.error("Failed to clean up temp video dir:", err);
+      console.error("Failed to clean up temp video dir:", err);
     }
   }
 };
-
 
 export const getVoiceOverviewUrl = async (req, res, next) => {
   try {
@@ -595,61 +639,18 @@ export const getVoiceOverviewUrl = async (req, res, next) => {
 
     const voiceOverview = await VoiceOverview.findOne({
       documentId: document._id,
-      userId: req.user._id
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: "Voice Overview fetched successfully",
-      data: voiceOverview?.secureUrl
-    });
-
-
-  } catch (error) {
-    next(error);
-  }
-}
-
-export const getPodcastUrl = async (req, res, next) => {
-  try {
-    const { documentId } = req.params;
-
-    if (!documentId) {
-      return res.status(400).json({
-        success: false,
-        error: "Please provide documentId",
-        statusCode: 400,
-      });
-    }
-
-    const document = await Document.findOne({
-      _id: documentId,
       userId: req.user._id,
-      status: "ready",
-    });
-
-    if (!document) {
-      return res.status(404).json({
-        success: false,
-        error: "Document not found or not ready",
-        statusCode: 404,
-      });
-    }
-    
-    const podcastOverview = await PodcastOverview.findOne({
-      documentId: document._id,
-      userId: req.user._id
-    });
+    }).select("secureUrl type");
 
     return res.status(200).json({
       success: true,
       message: "Voice Overview fetched successfully",
-      data: podcastOverview?.secureUrl
+      data: voiceOverview,
     });
   } catch (error) {
     next(error);
   }
-}
+};
 
 export const getVideoUrl = async (req, res, next) => {
   try {
@@ -679,16 +680,70 @@ export const getVideoUrl = async (req, res, next) => {
 
     const videoOverview = await VideoOverview.findOne({
       documentId: document._id,
-      userId: req.user._id
+      userId: req.user._id,
     });
-
 
     return res.status(200).json({
       success: true,
       message: "Video Overview fetched successfully",
-      data: videoOverview?.secureUrl
+      data: videoOverview?.secureUrl,
     });
   } catch (error) {
     next(error);
   }
-}
+};
+
+// ── Test Recorder Endpoint ──
+// Tests ONLY the Puppeteer recorder with a pre-existing Gamma URL + fake audio.
+// Zero Gamma/ElevenLabs credits consumed. Remove after confirming production works.
+export const testRecorder = async (req, res, next) => {
+  let videoPath = "";
+  try {
+    const testUrl = "https://gamma.app/docs/gs4a3kzr07wicxv";
+    const slideCount = 3;
+    const slideDuration = 5;
+
+    const fakeAudio = Array.from({ length: slideCount }, (_, i) => ({
+      index: i + 1,
+      duration: slideDuration,
+      filePath: "",
+    }));
+
+    console.log("🧪 TEST RECORDER — Starting with URL:", testUrl);
+    console.log(
+      `🧪 TEST RECORDER — ${slideCount} slides, ${slideDuration}s each`,
+    );
+
+    videoPath = await enqueueRecording(testUrl, fakeAudio, "test_prod");
+    console.log("🧪 TEST RECORDER — Success! Video at:", videoPath);
+
+    const video = await uploadMedia(videoPath, "ai-learning-app/videos");
+
+    const videoUrl = video.secure_url;
+    console.log("Video Url: ", videoUrl);
+
+    return res.status(200).json({
+      success: true,
+      message: "Recorder test passed — recording works in production!",
+      videoPath,
+    });
+  } catch (error) {
+    console.error("🧪 TEST RECORDER — Failed:", error.message);
+    next(error);
+  } finally {
+    if (videoPath) {
+      try {
+        const videoDir = path.dirname(path.resolve(videoPath));
+        await fs.unlink(path.resolve(videoPath));
+
+        // Also remove the temp_video/<id> directory if it's empty
+        const files = await fs.readdir(videoDir);
+        if (files.length === 0) {
+          await fs.rmdir(videoDir);
+        }
+      } catch (err) {
+        console.error("Failed to clean up test recorder files:", err);
+      }
+    }
+  }
+};

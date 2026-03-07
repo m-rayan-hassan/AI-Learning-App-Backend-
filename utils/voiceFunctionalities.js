@@ -42,7 +42,6 @@ export const generatePodcast = async (script, docId) => {
 
     const audioStream = await elevenlabs.textToDialogue.convert({
       voiceId: "bbGtsRRKUfYO634UxSjz", // Optional: Provide a default/fallback Voice ID
-      modelId: "eleven_flash_v2_5",
       inputs: dialogue,
     });
 
