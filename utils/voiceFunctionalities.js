@@ -11,10 +11,10 @@ const elevenlabs = new ElevenLabsClient({
 export const generateVoice = async (text, docId) => {
   try {
     const audioBuffer = await elevenlabs.textToSpeech.convert(
-      "JBFqnCBsd6RMkjVDRZzb",
+      "bbGtsRRKUfYO634UxSjz",
       {
         text: text,
-        modelId: "eleven_multilingual_v2",
+        modelId: "eleven_flash_v2_5",
         outputFormat: "mp3_44100_128",
       },
     );
@@ -41,7 +41,8 @@ export const generatePodcast = async (script, docId) => {
     const dialogue = JSON.parse(script);
 
     const audioStream = await elevenlabs.textToDialogue.convert({
-      voiceId: "JBFqnCBsd6RMkjVDRZzb", // Optional: Provide a default/fallback Voice ID
+      voiceId: "bbGtsRRKUfYO634UxSjz", // Optional: Provide a default/fallback Voice ID
+      modelId: "eleven_flash_v2_5",
       inputs: dialogue,
     });
 
@@ -49,7 +50,10 @@ export const generatePodcast = async (script, docId) => {
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
-    const outputPath = path.join(uploadDir, `podcast_${docId}_${Date.now()}.mp3`);
+    const outputPath = path.join(
+      uploadDir,
+      `podcast_${docId}_${Date.now()}.mp3`,
+    );
     const fileWriteStream = fs.createWriteStream(outputPath);
 
     // 2. Pipe the stream to the file
@@ -71,7 +75,9 @@ export const generateVideoScript = async (scriptData, docId) => {
     fs.mkdirSync(tempDir, { recursive: true });
   }
 
-  console.log(`Starting audio generation for ${scriptData.slides.length} slides...`);
+  console.log(
+    `Starting audio generation for ${scriptData.slides.length} slides...`,
+  );
 
   try {
     for (const slide of scriptData.slides) {
@@ -79,12 +85,12 @@ export const generateVideoScript = async (scriptData, docId) => {
       const filePath = path.join(tempDir, fileName);
 
       const audioStream = await elevenlabs.textToSpeech.convert(
-        "JBFqnCBsd6RMkjVDRZzb",
+        "bbGtsRRKUfYO634UxSjz",
         {
-          text: slide.voiceover_script, 
-          model_id: "eleven_turbo_v2_5", 
+          text: slide.voiceover_script,
+          model_id: "eleven_flash_v2_5",
           output_format: "mp3_44100_128",
-        }
+        },
       );
 
       const fileWriteStream = fs.createWriteStream(filePath);
@@ -97,14 +103,13 @@ export const generateVideoScript = async (scriptData, docId) => {
       audioAssets.push({
         index: slide.index,
         filePath: filePath,
-        duration: duration
+        duration: duration,
       });
     }
 
     return audioAssets;
-
   } catch (error) {
     console.error("Error generating video audio assets:", error);
-    throw error; 
+    throw error;
   }
 };

@@ -422,8 +422,8 @@ export const generatePodcast = async (req, res, next) => {
 
     const content = document.extractedText;
 
-    const voice_id1 = "JBFqnCBsd6RMkjVDRZzb",
-      voice_id2 = "21m00Tcm4TlvDq8ikWAM";
+    const voice_id1 = "bbGtsRRKUfYO634UxSjz",
+      voice_id2 = "aUNOP2y8xEvi4nZebjIw";
 
     const podcastScript = await aiFunctionalities.generatePodcast(
       content,
