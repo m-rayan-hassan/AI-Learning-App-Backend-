@@ -1,16 +1,15 @@
 FROM node:20-slim
 
 # Install system dependencies:
-# - Chromium: for puppeteer-real-browser (headed mode)
+# - Chromium: for puppeteer-real-browser (Cloudflare bypass)
 # - FFmpeg: for fluent-ffmpeg (audio/video stitching)
-# - LibreOffice: for converting DOCX/PPTX/etc to PDF (headless mode)
-# - Xvfb + X11 libs: virtual display for headed Chrome (required by puppeteer-real-browser)
+# - LibreOffice: for converting DOCX/PPTX/etc to PDF
+# - Xvfb: virtual display — puppeteer-real-browser manages it via disableXvfb: false
 # - Fonts: proper text rendering in recordings and document conversion
 RUN apt-get update && apt-get install -y \
     chromium \
     ffmpeg \
     xvfb \
-    xauth \
     libreoffice-core \
     libreoffice-writer \
     libreoffice-calc \
@@ -56,6 +55,6 @@ RUN mkdir -p uploads temp_audio temp_video public/videos
 
 EXPOSE 3000
 
-# Start Xvfb virtual display in the background, set DISPLAY, then start Node.js.
-# Remove stale lock files first to prevent "Server is already active" errors on restart.
-CMD rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 && Xvfb :99 -screen 0 1920x1080x24 -ac & export DISPLAY=:99 && node index.js
+# puppeteer-real-browser manages Xvfb itself (disableXvfb: false).
+# No need to start Xvfb in CMD — the library handles it per-recording.
+CMD ["node", "index.js"]
