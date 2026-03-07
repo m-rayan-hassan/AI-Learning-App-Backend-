@@ -649,6 +649,8 @@ You MUST output ONLY a valid JSON object. Do NOT wrap it in markdown code blocks
 - Every slide must have: index (number), type (string), gamma_card_content (string), voiceover_script (string)
 - "slideCount" must equal the actual number of slides in the array
 - Keep on-screen text concise (prevent walls of text) and heavily request specific explanatory images, diagrams, or flowcharts.
+
+Note: For now just generate short vidoe of just 30 seconds max, meaning 2 cards and 30 sec audio
 `;
 
   try {

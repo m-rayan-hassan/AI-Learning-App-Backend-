@@ -1,8 +1,8 @@
-import { connect } from 'puppeteer-real-browser';
-import { PuppeteerScreenRecorder } from 'puppeteer-screen-recorder';
-import path from 'path';
-import fs from 'fs';
-import crypto from 'crypto';
+import { connect } from "puppeteer-real-browser";
+import { PuppeteerScreenRecorder } from "puppeteer-screen-recorder";
+import path from "path";
+import fs from "fs";
+import crypto from "crypto";
 
 export const recordPresentation = async (presentationUrl, audioData, docId) => {
   console.log(`🎥 Starting Recorder for: ${presentationUrl}`);
@@ -12,27 +12,31 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
   try {
     // puppeteer-real-browser with headless: false + Xvfb = "effectively headless"
     // Chrome runs in headed mode on a VIRTUAL display (no physical monitor needed).
-    // This is the ONLY reliable way to bypass Cloudflare Turnstile — true headless 
+    // This is the ONLY reliable way to bypass Cloudflare Turnstile — true headless
     // Chrome (headless: true or 'new') is always detected, regardless of stealth plugins.
+    // disableXvfb: true — We manage Xvfb at the Docker level via xvfb-run in the CMD.
+    // This is far more reliable than letting puppeteer-real-browser spawn its own Xvfb.
     const response = await connect({
       headless: false,
       turnstile: true,
-      disableXvfb: false,
+      disableXvfb: true,
       args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--window-size=1920,1080',
-        '--force-device-scale-factor=1',
-        '--hide-scrollbars',
-        '--use-gl=swiftshader',
-        '--enable-webgl',
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--disable-infobars',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--window-size=1920,1080",
+        "--force-device-scale-factor=1",
+        "--hide-scrollbars",
+        "--use-gl=swiftshader",
+        "--enable-webgl",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-infobars",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+        "--disable-features=TranslateUI",
+        "--start-maximized",
       ],
     });
 
@@ -49,51 +53,82 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
 
     // Override any CSS that might come from device pixel detection
     await page.evaluateOnNewDocument(() => {
-      Object.defineProperty(window, 'devicePixelRatio', {
+      Object.defineProperty(window, "devicePixelRatio", {
         get: () => 1,
       });
     });
 
     // Tell the browser to NOT reduce motion — needed for Gamma animations
     await page.emulateMediaFeatures([
-      { name: 'prefers-reduced-motion', value: 'no-preference' }
+      { name: "prefers-reduced-motion", value: "no-preference" },
     ]);
 
     // Navigate to the Gamma presentation
-    console.log('🌐 Navigating to presentation...');
-    await page.goto(presentationUrl, { waitUntil: 'networkidle2', timeout: 90000 });
+    // Use 'domcontentloaded' instead of 'networkidle2' — Gamma keeps persistent WebSocket
+    // and analytics connections open, so networkidle2 NEVER resolves, causing a timeout.
+    console.log("🌐 Navigating to presentation...");
+    await page.goto(presentationUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: 120000,
+    });
+
+    // Now wait for the actual presentation content to appear in the DOM
+    console.log("⏳ Waiting for Gamma presentation content to render...");
+    try {
+      await page.waitForSelector(
+        '[class*="slide"], [class*="card"], [class*="present"], .doc-content, .gamma-page',
+        { timeout: 30000 },
+      );
+      console.log("✅ Presentation content detected.");
+    } catch (e) {
+      console.warn(
+        "⚠️ Could not detect specific Gamma elements, waiting extra time...",
+        e.message,
+      );
+      await new Promise((r) => setTimeout(r, 10000));
+    }
 
     // Wait for Turnstile to be solved (puppeteer-real-browser handles this automatically)
-    console.log('⏳ Waiting for Cloudflare verification to complete...');
+    console.log("⏳ Waiting for Cloudflare verification to complete...");
 
     try {
-      await page.waitForFunction(() => {
-        const turnstileFrame = document.querySelector('iframe[src*="challenges.cloudflare.com"]');
-        const turnstileContainer = document.querySelector('#challenge-running, #challenge-stage');
-        return !turnstileFrame && !turnstileContainer;
-      }, { timeout: 60000 });
-      console.log('✅ Cloudflare verification passed!');
+      await page.waitForFunction(
+        () => {
+          const turnstileFrame = document.querySelector(
+            'iframe[src*="challenges.cloudflare.com"]',
+          );
+          const turnstileContainer = document.querySelector(
+            "#challenge-running, #challenge-stage",
+          );
+          return !turnstileFrame && !turnstileContainer;
+        },
+        { timeout: 60000 },
+      );
+      console.log("✅ Cloudflare verification passed!");
     } catch (e) {
-      console.warn('⚠️ Cloudflare check timed out, proceeding anyway...', e.message);
+      console.warn(
+        "⚠️ Cloudflare check timed out, proceeding anyway...",
+        e.message,
+      );
     }
 
     // Give the page extra time to fully render after passing Cloudflare
-    await new Promise(r => setTimeout(r, 5000));
+    await new Promise((r) => setTimeout(r, 5000));
 
     // Enter Present Mode
     try {
-      await page.click('body');
-      await new Promise(r => setTimeout(r, 1000));
+      await page.click("body");
+      await new Promise((r) => setTimeout(r, 1000));
 
       // Ctrl+Shift+Enter to enter presentation mode
-      await page.keyboard.down('Control');
-      await page.keyboard.down('Shift');
-      await page.keyboard.press('Enter');
-      await page.keyboard.up('Shift');
-      await page.keyboard.up('Control');
+      await page.keyboard.down("Control");
+      await page.keyboard.down("Shift");
+      await page.keyboard.press("Enter");
+      await page.keyboard.up("Shift");
+      await page.keyboard.up("Control");
 
       // Wait for the fullscreen transition to settle
-      await new Promise(r => setTimeout(r, 5000));
+      await new Promise((r) => setTimeout(r, 5000));
     } catch (e) {
       console.warn("⚠️ Mode switch warning:", e);
     }
@@ -102,17 +137,20 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
     const recorder = new PuppeteerScreenRecorder(page, {
       followNewTab: false,
       fps: 60,
-      ffmpeg_Path: '/usr/bin/ffmpeg',
+      ffmpeg_Path: "/usr/bin/ffmpeg",
       videoFrame: { width: 1920, height: 1080 },
       videoCrf: 18,
-      aspectRatio: '16:9',
+      aspectRatio: "16:9",
     });
 
     // Use docId + timestamp + random UUID for concurrency-safe unique filenames
     const uniqueId = crypto.randomUUID().slice(0, 8);
     const tempDir = path.join(process.cwd(), "temp_video", docId.toString());
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-    const outputVideoPath = path.join(tempDir, `silent_${docId}_${Date.now()}_${uniqueId}.mp4`);
+    const outputVideoPath = path.join(
+      tempDir,
+      `silent_${docId}_${Date.now()}_${uniqueId}.mp4`,
+    );
 
     await recorder.start(outputVideoPath);
     console.log("🔴 Recording Started (60 FPS)...");
@@ -123,23 +161,23 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
       console.log(`👉 Slide ${i + 1}: ${slideAudio.duration}s`);
 
       // 1. Wait for Voiceover
-      await new Promise(r => setTimeout(r, slideAudio.duration * 1000));
+      await new Promise((r) => setTimeout(r, slideAudio.duration * 1000));
 
       // 2. Wait for Breath (matches Stitcher silence)
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 500));
 
       // 3. Trigger Transition
       if (i < audioData.length - 1) {
         console.log("   ➡️ Animate Next Slide");
-        await page.keyboard.press('ArrowRight');
+        await page.keyboard.press("ArrowRight");
 
         // 4. CAPTURE THE ANIMATION
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise((r) => setTimeout(r, 1500));
       }
     }
 
     // End Buffer
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 2000));
 
     await recorder.stop();
     console.log("✅ Recording complete:", outputVideoPath);
