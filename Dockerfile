@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     chromium \
     ffmpeg \
     xvfb \
+    xauth \
     libreoffice-core \
     libreoffice-writer \
     libreoffice-calc \
