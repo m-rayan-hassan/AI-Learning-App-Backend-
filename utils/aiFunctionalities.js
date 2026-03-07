@@ -651,7 +651,6 @@ You MUST output ONLY a valid JSON object. Do NOT wrap it in markdown code blocks
 - "slideCount" must equal the actual number of slides in the array
 - Keep on-screen text concise (prevent walls of text) and heavily request specific explanatory images, diagrams, or flowcharts.
 
-Note: For now just generate short video of just 20 seconds max (10 sec each), meaning 2 cards and 10 sec audio per slide. Folow this strictly
 `;
 
   try {
