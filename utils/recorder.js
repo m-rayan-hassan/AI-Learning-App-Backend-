@@ -143,8 +143,8 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
     // Navigate to the presentation on the clean page
     console.log("🌐 Loading presentation on fresh page...");
     await page.goto(presentationUrl, {
-      waitUntil: "networkidle2",
-      timeout: 60000,
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
     });
 
     const pageTitle = await page.title();
