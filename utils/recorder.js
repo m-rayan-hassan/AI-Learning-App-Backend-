@@ -4,13 +4,10 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 
-// Helper: wait ms
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Dispatch a keyboard event via JavaScript (bypasses CDP).
- * Uses page.evaluate instead of page.keyboard.press which can timeout
- * under memory pressure on constrained servers.
+ * Dispatch a keyboard event via JS (bypasses CDP protocol).
  */
 const pressKey = async (page, key, code, keyCode) => {
   await page.evaluate(
@@ -34,7 +31,7 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
       headless: false,
       turnstile: true,
       disableXvfb: false,
-      protocolTimeout: 300000, // 5 min — generous timeout for constrained servers
+      protocolTimeout: 300000,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
@@ -42,6 +39,8 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
         "--window-size=1920,1200",
         "--force-device-scale-factor=1",
         "--hide-scrollbars",
+        "--use-gl=swiftshader",
+        "--enable-webgl",
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-infobars",
@@ -57,55 +56,25 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
     });
 
     browser = response.browser;
-    const page = response.page;
+    const cfPage = response.page;
 
-    page.setDefaultTimeout(120000);
-    page.setDefaultNavigationTimeout(120000);
+    cfPage.setDefaultTimeout(120000);
+    cfPage.setDefaultNavigationTimeout(120000);
 
-    // Close any extra pages/tabs puppeteer-real-browser may have opened
-    const allPages = await browser.pages();
-    for (const p of allPages) {
-      if (p !== page) {
-        await p.close().catch(() => {});
-      }
-    }
-
-    await page.setViewport({
-      width: 1920,
-      height: 1080,
-      deviceScaleFactor: 1,
-    });
-
-    await page.evaluateOnNewDocument(() => {
-      Object.defineProperty(window, "devicePixelRatio", {
-        get: () => 1,
-      });
-    });
-
-    await page.emulateMediaFeatures([
-      { name: "prefers-reduced-motion", value: "no-preference" },
-    ]);
-
-    // ========== STEP 1: Navigate ==========
-    console.log("🌐 Navigating to presentation...");
-    await page.goto(presentationUrl, {
+    // ========== STEP 1: Solve Cloudflare on the initial page ==========
+    console.log("🌐 Navigating to solve Cloudflare...");
+    await cfPage.goto(presentationUrl, {
       waitUntil: "domcontentloaded",
       timeout: 120000,
     });
     console.log("✅ DOM content loaded.");
 
-    // ========== STEP 2: Handle Cloudflare ==========
     console.log("⏳ Waiting for Cloudflare verification...");
-
     let cloudflareCleared = false;
     for (let attempt = 0; attempt < 30; attempt++) {
-      const hasTurnstile = await page.evaluate(() => {
-        const frame = document.querySelector(
-          'iframe[src*="challenges.cloudflare.com"]',
-        );
-        const container = document.querySelector(
-          "#challenge-running, #challenge-stage, #challenge-form",
-        );
+      const hasTurnstile = await cfPage.evaluate(() => {
+        const frame = document.querySelector('iframe[src*="challenges.cloudflare.com"]');
+        const container = document.querySelector("#challenge-running, #challenge-stage, #challenge-form");
         const isChallengePage =
           document.title.toLowerCase().includes("just a moment") ||
           document.title.toLowerCase().includes("attention required");
@@ -118,9 +87,7 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
         break;
       }
 
-      console.log(
-        `   ...Cloudflare still active (attempt ${attempt + 1}/30), waiting 3s...`,
-      );
+      console.log(`   ...Cloudflare still active (attempt ${attempt + 1}/30), waiting 3s...`);
       await sleep(3000);
     }
 
@@ -128,28 +95,66 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
       throw new Error("Cloudflare verification did not complete within 90 seconds.");
     }
 
-    // ========== STEP 3: Wait for page to load after Cloudflare ==========
-    const currentUrl = page.url();
-    console.log(`📍 Current URL after CF: ${currentUrl}`);
+    // ========== STEP 2: Open a FRESH tab and navigate ==========
+    // The CF page has contaminated DOM/JS state (Turnstile scripts, challenge
+    // remnants) that prevents Gamma's React SPA from properly mounting.
+    // A new tab inherits the cf_clearance cookie but starts with a clean context.
+    console.log("� Opening fresh tab with clean JS context...");
+    const page = await browser.newPage();
 
-    // Wait for any pending navigation (CF redirect) to complete
-    console.log("⏳ Waiting for post-CF navigation...");
-    try {
-      await page.waitForNavigation({
-        waitUntil: "networkidle2",
-        timeout: 30000,
-      });
-      console.log("✅ Post-CF navigation completed.");
-    } catch {
-      console.log("ℹ️ No pending navigation (page already loaded).");
+    // Close the CF page — free memory
+    await cfPage.close().catch(() => {});
+    console.log("✅ CF page closed, memory freed.");
+
+    // Close any other extra pages
+    const allPages = await browser.pages();
+    for (const p of allPages) {
+      if (p !== page) await p.close().catch(() => {});
     }
 
-    const pageTitle = await page.title();
-    console.log(`📄 Page title: "${pageTitle}"`);
+    // Configure the fresh page
+    page.setDefaultTimeout(120000);
+    page.setDefaultNavigationTimeout(120000);
 
-    // ========== STEP 4: Wait for Gamma content ==========
+    await page.setViewport({
+      width: 1920,
+      height: 1080,
+      deviceScaleFactor: 1,
+    });
+
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(window, "devicePixelRatio", { get: () => 1 });
+    });
+
+    await page.emulateMediaFeatures([
+      { name: "prefers-reduced-motion", value: "no-preference" },
+    ]);
+
+    // Log JS errors for debugging
+    page.on("console", (msg) => {
+      if (msg.type() === "error") {
+        console.log(`🔴 JS Console Error: ${msg.text()}`);
+      }
+    });
+    page.on("pageerror", (err) => {
+      console.log(`🔴 Page Error: ${err.message}`);
+    });
+
+    // Navigate to the presentation on the clean page
+    console.log("🌐 Loading presentation on fresh page...");
+    await page.goto(presentationUrl, {
+      waitUntil: "networkidle2",
+      timeout: 60000,
+    });
+
+    const pageTitle = await page.title();
+    const pageUrl = page.url();
+    console.log(`📄 Page title: "${pageTitle}"`);
+    console.log(`📍 URL: ${pageUrl}`);
+
+    // ========== STEP 3: Wait for Gamma content ==========
     console.log("⏳ Waiting for Gamma content...");
-    await sleep(3000);
+    await sleep(5000); // Let SPA hydrate
 
     let contentReady = false;
     for (let attempt = 0; attempt < 12; attempt++) {
@@ -159,7 +164,7 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
         const textLen = body.innerText.length;
         const divCount = document.querySelectorAll("div").length;
         const hasGamma =
-          !!document.querySelector('[data-block-id]') ||
+          !!document.querySelector("[data-block-id]") ||
           !!document.querySelector('[class*="deck"]') ||
           !!document.querySelector('[class*="slide"]') ||
           !!document.querySelector('[class*="card"]') ||
@@ -179,54 +184,20 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
       }
 
       console.log(`   ...Loading (${attempt + 1}/12): text=${info.textLen}, divs=${info.divCount}, gamma=${info.hasGamma}`);
-
-      // Fallback: try navigating to URL after 5 failed attempts
-      if (attempt === 4) {
-        console.log("   ...Trying page.goto() fallback...");
-        try {
-          await page.goto(presentationUrl, { waitUntil: "networkidle2", timeout: 30000 });
-          console.log("   ✅ Fallback navigation done.");
-        } catch (e) {
-          console.warn("   ⚠️ Fallback failed:", e.message);
-        }
-      }
-
-      await sleep(3000);
+      await sleep(5000);
     }
 
     if (!contentReady) {
-      console.warn("⚠️ Content not detected, proceeding anyway with extra wait...");
+      console.warn("⚠️ Content not detected, proceeding with extra wait...");
+      // Log a snippet of the HTML for remote debugging
+      const html = await page.content();
+      console.log(`📄 HTML snippet (first 500 chars):\n${html.substring(0, 500)}`);
       await sleep(10000);
     }
 
     await sleep(3000); // Final render buffer
 
-    // ========== STEP 5: Start recorder BEFORE presentation mode ==========
-    // Starting the recorder here (before Present) ensures the CDP session
-    // is created while the page is in a stable state, avoiding
-    // Target.attachToTarget timeouts during page transitions.
-    console.log("🎬 Initializing recorder...");
-    const recorder = new PuppeteerScreenRecorder(page, {
-      followNewTab: false,
-      fps: 25,          // Reduced from 60 — saves significant CPU/memory
-      ffmpeg_Path: "/usr/bin/ffmpeg",
-      videoFrame: { width: 1920, height: 1080 },
-      videoCrf: 23,     // Balanced quality vs encoding overhead
-      aspectRatio: "16:9",
-    });
-
-    const uniqueId = crypto.randomUUID().slice(0, 8);
-    const tempDir = path.join(process.cwd(), "temp_video", docId.toString());
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-    const outputVideoPath = path.join(
-      tempDir,
-      `silent_${docId}_${Date.now()}_${uniqueId}.mp4`,
-    );
-
-    await recorder.start(outputVideoPath);
-    console.log("🔴 Recording started (25 FPS).");
-
-    // ========== STEP 6: Enter Presentation Mode ==========
+    // ========== STEP 4: Enter Presentation Mode ==========
     console.log("🎬 Entering presentation mode...");
     try {
       await page.click("body").catch(() => {});
@@ -257,19 +228,38 @@ export const recordPresentation = async (presentationUrl, audioData, docId) => {
       if (presentClicked) {
         console.log(`✅ Clicked Present (${presentClicked}).`);
       } else {
-        // Fallback: JavaScript keyboard event (no CDP)
-        console.log("⚠️ Present button not found, using JS keyboard event...");
+        console.log("⚠️ Present button not found, trying keyboard shortcut...");
         await pressKey(page, "Enter", "Enter", 13);
       }
-      await sleep(5000); // Wait for presentation mode transition
+      await sleep(5000);
     } catch (e) {
       console.warn("⚠️ Presentation mode warning:", e.message);
       await sleep(3000);
     }
 
-    // ========== STEP 7: Slide Navigation Loop ==========
-    // Uses JavaScript keyboard events (page.evaluate) instead of CDP
-    // page.keyboard.press which causes Input.dispatchKeyEvent timeouts.
+    // ========== STEP 5: Start recorder AFTER presentation mode ==========
+    console.log("🎬 Initializing recorder...");
+    const recorder = new PuppeteerScreenRecorder(page, {
+      followNewTab: false,
+      fps: 25,
+      ffmpeg_Path: "/usr/bin/ffmpeg",
+      videoFrame: { width: 1920, height: 1080 },
+      videoCrf: 23,
+      aspectRatio: "16:9",
+    });
+
+    const uniqueId = crypto.randomUUID().slice(0, 8);
+    const tempDir = path.join(process.cwd(), "temp_video", docId.toString());
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    const outputVideoPath = path.join(
+      tempDir,
+      `silent_${docId}_${Date.now()}_${uniqueId}.mp4`,
+    );
+
+    await recorder.start(outputVideoPath);
+    console.log("🔴 Recording started (25 FPS).");
+
+    // ========== STEP 6: Slide Navigation ==========
     console.log("▶️ Starting slide navigation...");
     for (let i = 0; i < audioData.length; i++) {
       const slideAudio = audioData[i];
