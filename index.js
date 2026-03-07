@@ -37,7 +37,6 @@ if (process.env.CLIENT_URL) {
   allowedOrigins.push(...urls);
 }
 
-
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -133,7 +132,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(
     ` Server running on port ${PORT} in ${process.env.NODE_ENV} mode`,
   );

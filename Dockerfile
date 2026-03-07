@@ -56,6 +56,6 @@ RUN mkdir -p uploads temp_audio temp_video public/videos
 
 EXPOSE 3000
 
-# Start Xvfb virtual display BEFORE Node.js — required for headed Chrome in Docker.
-# Without this, puppeteer-real-browser's internal Xvfb management is unreliable in containers.
-CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1920x1080x24 -ac", "node", "index.js"]
+# Start Xvfb virtual display in the background, set DISPLAY, then start Node.js.
+# This prevents xvfb-run from masking Node's port binding from Render's health checks.
+CMD Xvfb :99 -screen 0 1920x1080x24 -ac & export DISPLAY=:99 && node index.js
