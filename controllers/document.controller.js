@@ -327,9 +327,6 @@ export const deleteDocument = async (req, res, next) => {
     if (voicePublicId) {
       await deleteVideoFromCloudinary(voicePublicId);
     }
-    if (podcastPublicId) {
-      await deleteVideoFromCloudinary(podcastPublicId);
-    }
     if (videoPublicId) {
       await deleteVideoFromCloudinary(videoPublicId);
     }
