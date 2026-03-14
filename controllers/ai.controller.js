@@ -2,6 +2,7 @@ import Document from "../models/Document.model.js";
 import Flashcard from "../models/Flashcard.model.js";
 import Quiz from "../models/Quiz.model.js";
 import ChatHistory from "../models/ChatHistory.model.js";
+import User from "../models/User.model.js";
 import VoiceOverview from "../models/VoiceOverview.model.js";
 import VideoOverview from "../models/VideoOverview.model.js";
 import * as aiFunctionalities from "../utils/aiFunctionalities.js";
@@ -16,6 +17,7 @@ import {
 } from "../utils/gammaFunctionalities.js";
 import { enqueueRecording } from "../utils/recordingQueue.js";
 import { stitchAudioAndVideo } from "../utils/stitcher.js";
+import { userPlans } from "../utils/planFeaturesAndLimit.js";
 
 export const generateFlashcards = async (req, res, next) => {
   try {
@@ -44,6 +46,22 @@ export const generateFlashcards = async (req, res, next) => {
       });
     }
 
+    const user = await User.findOne({ _id: req.user._id });
+    const userFlashcardCount = user.quotas.flashcard.count;
+    const userPlan = user.planType;
+
+    if (
+      userFlashcardCount >= userPlans[userPlan].flashcards &&
+      new Date() < user.quotas.flashcard.resetDate
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Flashcards generation limit reached uplaod. Upgrade to generate",
+        statusCode: 400,
+      });
+    }
+
     const content = document.extractedText;
 
     const cards = await aiFunctionalities.generateFlashcards(
@@ -64,6 +82,8 @@ export const generateFlashcards = async (req, res, next) => {
         isStarted: false,
       })),
     });
+
+    await user.incrementQuota("flashcard");
 
     res.status(201).json({
       success: true,
@@ -93,11 +113,27 @@ export const generateQuiz = async (req, res, next) => {
       status: "ready",
     });
 
+    // Note: fixing your typo staus to status as well
     if (!document) {
-      return res.staus(404).json({
+      return res.status(404).json({
         success: false,
         error: "Document not found or not ready",
         statusCode: 404,
+      });
+    }
+
+    const user = await User.findOne({ _id: req.user._id });
+    const userQuizCount = user.quotas.quiz.count;
+    const userPlan = user.planType;
+
+    if (
+      userQuizCount >= userPlans[userPlan].quizzes &&
+      new Date() < user.quotas.quiz.resetDate
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Quiz generation limit reached. Upgrade to generate more.",
+        statusCode: 400,
       });
     }
 
@@ -118,6 +154,8 @@ export const generateQuiz = async (req, res, next) => {
       userAnswers: [],
       score: 0,
     });
+
+    await user.incrementQuota("quiz");
 
     res.status(200).json({
       success: true,
@@ -356,6 +394,21 @@ export const generateVoiceOverview = async (req, res, next) => {
       });
     }
 
+    const user = await User.findOne({ _id: req.user._id });
+    const userVoiceCount = user.quotas.voiceOverview.count;
+    const userPlan = user.planType;
+
+    if (
+      userVoiceCount >= userPlans[userPlan].voice &&
+      new Date() < user.quotas.voiceOverview.resetDate
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Voice generation limit reached. Upgrade to generate more.",
+        statusCode: 400,
+      });
+    }
+
     const content = document.extractedText;
 
     const voiceScript =
@@ -380,6 +433,8 @@ export const generateVoiceOverview = async (req, res, next) => {
       publicId: voiceOverview.public_id,
       secureUrl: voiceOverviewUrl,
     });
+
+    await user.incrementQuota("voiceOverview");
 
     res.status(200).json({
       success: true,
@@ -426,6 +481,21 @@ export const generatePodcast = async (req, res, next) => {
       });
     }
 
+    const user = await User.findOne({ _id: req.user._id });
+    const userVoiceCount = user.quotas.voiceOverview.count;
+    const userPlan = user.planType;
+
+    if (
+      userVoiceCount >= userPlans[userPlan].voice &&
+      new Date() < user.quotas.voiceOverview.resetDate
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Podcast generation limit reached. Upgrade to generate more.",
+        statusCode: 400,
+      });
+    }
+
     const content = document.extractedText;
 
     const voice_id1 = "bbGtsRRKUfYO634UxSjz",
@@ -456,6 +526,8 @@ export const generatePodcast = async (req, res, next) => {
       publicId: podcast.public_id,
       secureUrl: podcastUrl,
     });
+
+    await user.incrementQuota("voiceOverview");
 
     res.status(200).json({
       success: true,
@@ -504,6 +576,21 @@ export const generateVideo = async (req, res, next) => {
         success: false,
         error: "Document not found or not ready",
         statusCode: 404,
+      });
+    }
+
+    const user = await User.findOne({ _id: req.user._id });
+    const userVideoCount = user.quotas.video.count;
+    const userPlan = user.planType;
+
+    if (
+      userVideoCount >= userPlans[userPlan].video &&
+      new Date() < user.quotas.video.resetDate
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Video generation limit reached. Upgrade to generate more.",
+        statusCode: 400,
       });
     }
 
@@ -558,6 +645,8 @@ export const generateVideo = async (req, res, next) => {
       publicId: video.public_id,
       secureUrl: videoUrl,
     });
+
+    await user.incrementQuota("video");
 
     return res.status(200).json({
       success: true,

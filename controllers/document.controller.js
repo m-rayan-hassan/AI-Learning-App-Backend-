@@ -1,16 +1,21 @@
 import Document from "../models/Document.model.js";
 import Flashcard from "../models/Flashcard.model.js";
 import Quiz from "../models/Quiz.model.js";
-import ChatHistory from "../models/ChatHistory.model.js"
-import { deleteVideoFromCloudinary, uploadMedia } from "../config/cloudinary.js";
+import ChatHistory from "../models/ChatHistory.model.js";
+import {
+  deleteVideoFromCloudinary,
+  uploadMedia,
+} from "../config/cloudinary.js";
 import { convertToPdf } from "../utils/converter.js";
 import fs from "fs";
 import mongoose from "mongoose";
 import { deleteMedia } from "../config/cloudinary.js";
 import { getFileInfo } from "../utils/getFileInfo.js";
-import * as aiFunctionalities from "../utils/aiFunctionalities.js"
+import * as aiFunctionalities from "../utils/aiFunctionalities.js";
 import VoiceOverview from "../models/VoiceOverview.model.js";
 import VideoOverview from "../models/VideoOverview.model.js";
+import User from "../models/User.model.js";
+import { userPlans } from "../utils/planFeaturesAndLimit.js";
 
 // Upload Document Controller
 export const uploadDocument = async (req, res) => {
@@ -36,11 +41,26 @@ export const uploadDocument = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Document title is required",
-        statusCode: 400
+        statusCode: 400,
+      });
+    }
+
+    const user = await User.findOne({ _id: userId });
+    const userDocumentCount = user.quotas.document.count;
+    const userPlan = user.planType;
+
+    console.log("user: ", user);
+    console.log("user document count: ", userDocumentCount);
+    console.log("userPlan: ", userPlan);
+
+    if (userDocumentCount >= userPlans[userPlan].docs && new Date() < user.quotas.document.resetDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Document uplaod limit reatched. Upgrade to upload",
+        statusCode: 400,
       });
     }
     console.log(`Processing file: ${originalName}, Title: ${title}`);
-
 
     // Check if conversion is needed
     if (mimeType !== "application/pdf") {
@@ -69,7 +89,6 @@ export const uploadDocument = async (req, res) => {
         statusCode: 400,
       });
     }
-
 
     // Upload Original File to Cloudinary
     console.log(`Uploading original file to Cloudinary...`);
@@ -123,30 +142,46 @@ export const uploadDocument = async (req, res) => {
 
     await newDocument.save();
     const duration = (Date.now() - startTime) / 1000;
-    console.log(`--- Document Upload request finished in ${duration}s, continuing processing in background ---`);
+    console.log(
+      `--- Document Upload request finished in ${duration}s, continuing processing in background ---`,
+    );
 
     res.status(201).json({
       success: true,
-      message: "Document uploaded successfully. AI is now analyzing and extracting content.",
+      message:
+        "Document uploaded successfully. AI is now analyzing and extracting content.",
       data: newDocument,
     });
 
     // Run AI extraction in the background
     (async () => {
       try {
-        console.log(`Starting background Gemini extraction for document ${newDocument._id}...`);
-        const getExtractedContent = await aiFunctionalities.getExtractedContent(pdfUrl);
-        console.log(`Gemini extraction complete for document ${newDocument._id}.`);
-        
+        console.log(
+          `Starting background Gemini extraction for document ${newDocument._id}...`,
+        );
+        const getExtractedContent =
+          await aiFunctionalities.getExtractedContent(pdfUrl);
+        console.log(
+          `Gemini extraction complete for document ${newDocument._id}.`,
+        );
+
         await Document.findByIdAndUpdate(newDocument._id, {
           extractedText: getExtractedContent,
-          status: "ready"
+          status: "ready",
         });
-        console.log(`Document ${newDocument._id} successfully updated to 'ready' status.`);
+        console.log(
+          `Document ${newDocument._id} successfully updated to 'ready' status.`,
+        );
+        await user.incrementQuota("document");
+        console.log("user document count: ", user.quotas.document.count);
+        
       } catch (extractionError) {
-        console.error(`Background extraction error for document ${newDocument._id}:`, extractionError);
+        console.error(
+          `Background extraction error for document ${newDocument._id}:`,
+          extractionError,
+        );
         await Document.findByIdAndUpdate(newDocument._id, {
-          status: "failed"
+          status: "failed",
         });
       }
     })();
@@ -163,7 +198,7 @@ export const uploadDocument = async (req, res) => {
       message: "Server error during document upload",
       error: error.message,
     });
-  } 
+  }
 };
 
 // Get all documents for a user
@@ -314,28 +349,28 @@ export const deleteDocument = async (req, res, next) => {
 
     const voicePublicId = await VoiceOverview.findOne({
       documentId: document._id,
-      userId: req.user._id
+      userId: req.user._id,
     }).select("publicId");
 
     const videoPublicId = await VideoOverview.findOne({
       documentId: document._id,
-      userId: req.user._id
+      userId: req.user._id,
     }).select("publicId");
 
     await deleteMedia(document.originalFilePublicId);
     await deleteMedia(document.pdfFilePublicId);
-    
+
     if (voicePublicId) {
       await deleteVideoFromCloudinary(voicePublicId);
     }
     if (videoPublicId) {
       await deleteVideoFromCloudinary(videoPublicId);
     }
-    await Flashcard.deleteMany({documentId: document._id});
-    await Quiz.deleteMany({documentId: document._id});
-    await ChatHistory.deleteMany({documentId: document._id});
-    await VoiceOverview.deleteOne({documentId: document._id});
-    await VideoOverview.deleteOne({documentId: document._id});
+    await Flashcard.deleteMany({ documentId: document._id });
+    await Quiz.deleteMany({ documentId: document._id });
+    await ChatHistory.deleteMany({ documentId: document._id });
+    await VoiceOverview.deleteOne({ documentId: document._id });
+    await VideoOverview.deleteOne({ documentId: document._id });
 
     await document.deleteOne();
 

@@ -1,27 +1,30 @@
 import mongoose from "mongoose";
 
-const videoSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
+const videoSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    documentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Document",
+      required: true,
+    },
+    publicId: {
+      type: String,
+      required: true,
+    },
+    secureUrl: {
+      type: String,
+      required: true,
+    },
   },
-  documentId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Document",
-    required: true,
+  {
+    timestamps: true,
   },
-  publicId: {
-    type: String,
-    required: true,
-  },
-  secureUrl : {
-    type: String,
-    required: true
-  },
-}, {
-    timestamps: true
-});
+);
 
 videoSchema.index({ userId: 1, documentId: 1 });
 

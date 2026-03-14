@@ -1,19 +1,38 @@
-import User from '../models/User.model.js';
+import User from "../models/User.model.js";
 import { paddle } from "../utils/paddle.js";
-import { EventName } from '@paddle/paddle-node-sdk';
+import { EventName } from "@paddle/paddle-node-sdk";
 
 // ─── Plan → Price ID Mapping ────────────────────────────────────────
 const PLANS = {
   plus: process.env.PADDLE_PRICE_ID_PLUS,
   pro: process.env.PADDLE_PRICE_ID_PRO,
-  premium: process.env.PADDLE_PRICE_ID_PREMIUM
+  premium: process.env.PADDLE_PRICE_ID_PREMIUM,
 };
 
 const getPlanFromPriceId = (priceId) => {
-  if (priceId === process.env.PADDLE_PRICE_ID_PLUS) return 'plus';
-  if (priceId === process.env.PADDLE_PRICE_ID_PRO) return 'pro';
-  if (priceId === process.env.PADDLE_PRICE_ID_PREMIUM) return 'premium';
-  return 'free';
+  if (priceId === process.env.PADDLE_PRICE_ID_PLUS) return "plus";
+  if (priceId === process.env.PADDLE_PRICE_ID_PRO) return "pro";
+  if (priceId === process.env.PADDLE_PRICE_ID_PREMIUM) return "premium";
+  return "free";
+};
+
+// Helper function to build the Mongoose update fields for resetting quotas
+const getQuotaResetFields = () => {
+  const nextMonth = new Date();
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+  return {
+    "quotas.video.count": 0,
+    "quotas.video.resetDate": nextMonth,
+    "quotas.flashcard.count": 0,
+    "quotas.flashcard.resetDate": nextMonth,
+    "quotas.quiz.count": 0,
+    "quotas.quiz.resetDate": nextMonth,
+    "quotas.voiceOverview.count": 0,
+    "quotas.voiceOverview.resetDate": nextMonth,
+    "quotas.document.count": 0,
+    "quotas.document.resetDate": nextMonth,
+  };
 };
 
 // ─────────────────────────────────────────────────────────────────────
@@ -22,9 +41,12 @@ const getPlanFromPriceId = (priceId) => {
 export const getSubscription = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select(
-      'planType subscriptionStatus subscriptionEndDate paddleSubscriptionId paddleCustomerId'
+      "planType subscriptionStatus subscriptionEndDate paddleSubscriptionId paddleCustomerId",
     );
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     return res.json({
       success: true,
@@ -32,13 +54,16 @@ export const getSubscription = async (req, res) => {
         planType: user.planType,
         subscriptionStatus: user.subscriptionStatus,
         subscriptionEndDate: user.subscriptionEndDate,
-        hasActiveSubscription: user.planType !== 'free' && user.subscriptionStatus === 'active',
-        paddleScheduledChange: user.paddleScheduledChange
-      }
+        hasActiveSubscription:
+          user.planType !== "free" && user.subscriptionStatus === "active",
+        paddleScheduledChange: user.paddleScheduledChange,
+      },
     });
   } catch (error) {
     console.error("getSubscription error:", error);
-    return res.status(500).json({ success: false, message: "Failed to get subscription info" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to get subscription info" });
   }
 };
 
@@ -50,15 +75,21 @@ export const getSubscription = async (req, res) => {
 export const subscribe = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     const { targetPlan } = req.body;
     const newPriceId = PLANS[targetPlan];
-    if (!newPriceId) return res.status(400).json({ success: false, message: "Invalid plan" });
+    if (!newPriceId)
+      return res.status(400).json({ success: false, message: "Invalid plan" });
 
     // Already on this plan
     if (user.planType === targetPlan) {
-      return res.status(400).json({ success: false, message: "You are already on this plan" });
+      return res
+        .status(400)
+        .json({ success: false, message: "You are already on this plan" });
     }
 
     // Prevent downgrades
@@ -67,27 +98,29 @@ export const subscribe = async (req, res) => {
     const targetRank = planRanks[targetPlan] || 0;
 
     if (targetRank < currentRank) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Downgrading subscriptions is not currently supported." 
+      return res.status(400).json({
+        success: false,
+        message: "Downgrading subscriptions is not currently supported.",
       });
     }
 
     // PAID user → tell frontend to call preview-upgrade next
-    if (user.paddleSubscriptionId && user.planType !== 'free') {
-      return res.json({ success: true, action: 'preview_upgrade', targetPlan });
+    if (user.paddleSubscriptionId && user.planType !== "free") {
+      return res.json({ success: true, action: "preview_upgrade", targetPlan });
     }
 
     // FREE user → return priceId for Paddle Checkout overlay
     return res.json({
       success: true,
-      action: 'checkout',
+      action: "checkout",
       priceId: newPriceId,
       userEmail: user.email,
     });
   } catch (error) {
     console.error("subscribe error:", error);
-    return res.status(500).json({ success: false, message: "Subscription request failed" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Subscription request failed" });
   }
 };
 
@@ -101,17 +134,23 @@ export const previewUpgrade = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user?.paddleSubscriptionId) {
-      return res.status(400).json({ success: false, message: "No active subscription" });
+      return res
+        .status(400)
+        .json({ success: false, message: "No active subscription" });
     }
 
     const { targetPlan } = req.body;
     const newPriceId = PLANS[targetPlan];
-    if (!newPriceId) return res.status(400).json({ success: false, message: "Invalid plan" });
+    if (!newPriceId)
+      return res.status(400).json({ success: false, message: "Invalid plan" });
 
-    const preview = await paddle.subscriptions.previewUpdate(user.paddleSubscriptionId, {
-      items: [{ priceId: newPriceId, quantity: 1 }],
-      prorationBillingMode: 'prorated_immediately',
-    });
+    const preview = await paddle.subscriptions.previewUpdate(
+      user.paddleSubscriptionId,
+      {
+        items: [{ priceId: newPriceId, quantity: 1 }],
+        prorationBillingMode: "prorated_immediately",
+      },
+    );
 
     // updateSummary has .credit (Money) and .charge (Money)
     // Money = { amount: "500", currencyCode: "USD" }
@@ -123,25 +162,31 @@ export const previewUpgrade = async (req, res) => {
       success: true,
       targetPlan,
       currentPlan: user.planType,
-      currencyCode: preview.currencyCode || totals?.currencyCode || 'USD',
-      updateSummary: summary ? {
-        credit: summary.credit?.amount || '0',
-        charge: summary.charge?.amount || '0',
-        creditCurrency: summary.credit?.currencyCode,
-        chargeCurrency: summary.charge?.currencyCode,
-      } : null,
-      immediateTransaction: totals ? {
-        subtotal: totals.subtotal,
-        tax: totals.tax,
-        total: totals.total,
-        credit: totals.credit,
-        grandTotal: totals.grandTotal,
-        currencyCode: totals.currencyCode,
-      } : null,
+      currencyCode: preview.currencyCode || totals?.currencyCode || "USD",
+      updateSummary: summary
+        ? {
+            credit: summary.credit?.amount || "0",
+            charge: summary.charge?.amount || "0",
+            creditCurrency: summary.credit?.currencyCode,
+            chargeCurrency: summary.charge?.currencyCode,
+          }
+        : null,
+      immediateTransaction: totals
+        ? {
+            subtotal: totals.subtotal,
+            tax: totals.tax,
+            total: totals.total,
+            credit: totals.credit,
+            grandTotal: totals.grandTotal,
+            currencyCode: totals.currencyCode,
+          }
+        : null,
     });
   } catch (error) {
     console.error("previewUpgrade error:", error);
-    return res.status(500).json({ success: false, message: error.message || "Preview failed" });
+    return res
+      .status(500)
+      .json({ success: false, message: error.message || "Preview failed" });
   }
 };
 
@@ -153,20 +198,41 @@ export const confirmUpgrade = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user?.paddleSubscriptionId) {
-      return res.status(400).json({ success: false, message: "No active subscription" });
+      return res
+        .status(400)
+        .json({ success: false, message: "No active subscription" });
     }
 
     const { targetPlan } = req.body;
     const newPriceId = PLANS[targetPlan];
-    if (!newPriceId) return res.status(400).json({ success: false, message: "Invalid plan" });
+    if (!newPriceId)
+      return res.status(400).json({ success: false, message: "Invalid plan" });
 
     await paddle.subscriptions.update(user.paddleSubscriptionId, {
       items: [{ priceId: newPriceId, quantity: 1 }],
-      prorationBillingMode: 'prorated_immediately',
+      prorationBillingMode: "prorated_immediately",
     });
 
     // Update DB immediately (webhook will also confirm)
     user.planType = targetPlan;
+
+    // Reset quotas on upgrade
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const quotaTypes = [
+      "video",
+      "flashcard",
+      "quiz",
+      "voiceOverview",
+      "document",
+    ];
+    quotaTypes.forEach((type) => {
+      if (user.quotas && user.quotas[type]) {
+        user.quotas[type].count = 0;
+        user.quotas[type].resetDate = nextMonth;
+      }
+    });
+
     await user.save();
 
     console.log(`[Upgrade] User ${user._id} → ${targetPlan}`);
@@ -177,7 +243,9 @@ export const confirmUpgrade = async (req, res) => {
     });
   } catch (error) {
     console.error("confirmUpgrade error:", error);
-    return res.status(500).json({ success: false, message: error.message || "Upgrade failed" });
+    return res
+      .status(500)
+      .json({ success: false, message: error.message || "Upgrade failed" });
   }
 };
 
@@ -188,21 +256,26 @@ export const confirmUpgrade = async (req, res) => {
 export const cancelSubscription = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     if (!user.paddleSubscriptionId) {
-      return res.status(400).json({ success: false, message: "No active subscription to cancel" });
+      return res
+        .status(400)
+        .json({ success: false, message: "No active subscription to cancel" });
     }
 
     try {
       await paddle.subscriptions.cancel(user.paddleSubscriptionId, {
-        effectiveFrom: 'next_billing_period',
+        effectiveFrom: "next_billing_period",
       });
     } catch (paddleErr) {
       console.error("Paddle cancel API error:", paddleErr);
       // If already canceled on Paddle's side, just update our DB
-      const msg = paddleErr?.message || '';
-      if (!msg.includes('already') && !msg.includes('canceled')) {
+      const msg = paddleErr?.message || "";
+      if (!msg.includes("already") && !msg.includes("canceled")) {
         return res.status(400).json({
           success: false,
           message: "Paddle could not cancel: " + msg,
@@ -210,18 +283,21 @@ export const cancelSubscription = async (req, res) => {
       }
     }
 
-    user.subscriptionStatus = 'canceled';
-    user.paddleScheduledChange = { action: 'cancel' };
+    user.subscriptionStatus = "canceled";
+    user.paddleScheduledChange = { action: "cancel" };
     await user.save();
 
     return res.json({
       success: true,
-      message: "Your subscription will be canceled at the end of your billing period. You'll keep access until then.",
+      message:
+        "Your subscription will be canceled at the end of your billing period. You'll keep access until then.",
       subscriptionEndDate: user.subscriptionEndDate,
     });
   } catch (error) {
     console.error("cancelSubscription error:", error);
-    return res.status(500).json({ success: false, message: "Failed to cancel subscription" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to cancel subscription" });
   }
 };
 
@@ -230,7 +306,7 @@ export const cancelSubscription = async (req, res) => {
 // Must receive RAW body (express.raw applied in index.js before express.json)
 // ─────────────────────────────────────────────────────────────────────
 export const paymentWebhook = async (req, res) => {
-  const signature = req.headers['paddle-signature'];
+  const signature = req.headers["paddle-signature"];
   const secretKey = process.env.PADDLE_WEBHOOK_SECRET;
 
   try {
@@ -240,43 +316,75 @@ export const paymentWebhook = async (req, res) => {
     }
 
     // express.raw gives Buffer → SDK needs string
-    const rawBody = typeof req.body === 'string' ? req.body : req.body.toString('utf-8');
-    const eventData = await paddle.webhooks.unmarshal(rawBody, secretKey, signature);
+    const rawBody =
+      typeof req.body === "string" ? req.body : req.body.toString("utf-8");
+    const eventData = await paddle.webhooks.unmarshal(
+      rawBody,
+      secretKey,
+      signature,
+    );
     const { data, eventType } = eventData;
 
     console.log(`[Paddle Webhook] ${eventType}`);
 
     switch (eventType) {
-
       case EventName.SubscriptionActivated: {
         const userId = data.customData?.userId;
         if (!userId) break;
         const priceId = data.items?.[0]?.price?.id;
         await User.findByIdAndUpdate(userId, {
           planType: getPlanFromPriceId(priceId),
-          subscriptionStatus: 'active',
+          subscriptionStatus: "active",
           paddleCustomerId: data.customerId,
           paddleSubscriptionId: data.id,
-          subscriptionStartDate: data.startedAt ? new Date(data.startedAt) : new Date(),
-          subscriptionEndDate: data.currentBillingPeriod?.endsAt ? new Date(data.currentBillingPeriod.endsAt) : null,
-          paddleNextBilledAt: data.nextBilledAt ? new Date(data.nextBilledAt) : null,
+          subscriptionStartDate: data.startedAt
+            ? new Date(data.startedAt)
+            : new Date(),
+          subscriptionEndDate: data.currentBillingPeriod?.endsAt
+            ? new Date(data.currentBillingPeriod.endsAt)
+            : null,
+          paddleNextBilledAt: data.nextBilledAt
+            ? new Date(data.nextBilledAt)
+            : null,
+          ...getQuotaResetFields(), // Reset their usage limits immediately upon activation
         });
-        console.log(`  → User ${userId} activated: ${getPlanFromPriceId(priceId)}`);
+        console.log(
+          `  → User ${userId} activated: ${getPlanFromPriceId(priceId)}`,
+        );
         break;
       }
 
       case EventName.SubscriptionUpdated: {
         const userId = data.customData?.userId;
         if (!userId) break;
+
+        // Before updating, get their current plan from DB if we need to see if it changed
+        const userToUpdate = await User.findById(userId).select("planType");
         const priceId = data.items?.[0]?.price?.id;
+        const newPlanType = getPlanFromPriceId(priceId);
+
         const fields = {
-          planType: getPlanFromPriceId(priceId),
-          subscriptionStatus: data.status || 'active',
+          planType: newPlanType,
+          subscriptionStatus: data.status || "active",
           paddleCustomerId: data.customerId,
           paddleSubscriptionId: data.id,
-          subscriptionEndDate: data.currentBillingPeriod?.endsAt ? new Date(data.currentBillingPeriod.endsAt) : null,
-          paddleNextBilledAt: data.nextBilledAt ? new Date(data.nextBilledAt) : null,
+          subscriptionEndDate: data.currentBillingPeriod?.endsAt
+            ? new Date(data.currentBillingPeriod.endsAt)
+            : null,
+          paddleNextBilledAt: data.nextBilledAt
+            ? new Date(data.nextBilledAt)
+            : null,
         };
+
+        // If their plan actually changed to a higher tier, reset their quotas immediately
+        if (
+          userToUpdate &&
+          userToUpdate.planType !== newPlanType &&
+          newPlanType !== "free"
+        ) {
+          Object.assign(fields, getQuotaResetFields());
+        }
+
         if (data.scheduledChange) {
           fields.paddleScheduledChange = {
             action: data.scheduledChange.action,
@@ -284,24 +392,29 @@ export const paymentWebhook = async (req, res) => {
           };
         }
         await User.findByIdAndUpdate(userId, fields);
-        console.log(`  → User ${userId} updated: ${fields.planType} (${fields.subscriptionStatus})`);
+        console.log(
+          `  → User ${userId} updated: ${fields.planType} (${fields.subscriptionStatus})`,
+        );
         break;
       }
 
       case EventName.TransactionCompleted: {
         const userId = data.customData?.userId;
         if (!userId) break;
-        const priceId = data.details?.lineItems?.[0]?.priceId || data.items?.[0]?.price?.id;
+        const priceId =
+          data.details?.lineItems?.[0]?.priceId || data.items?.[0]?.price?.id;
         await User.findByIdAndUpdate(userId, {
           planType: getPlanFromPriceId(priceId),
-          subscriptionStatus: 'active',
+          subscriptionStatus: "active",
           paddleCustomerId: data.customerId,
           paddleSubscriptionId: data.subscriptionId,
           lastPaymentDate: new Date(),
           lastPaymentAmount: data.details?.totals?.total,
           lastPaymentCurrency: data.currencyCode,
         });
-        console.log(`  → User ${userId} transaction completed: ${getPlanFromPriceId(priceId)}`);
+        console.log(
+          `  → User ${userId} transaction completed: ${getPlanFromPriceId(priceId)}`,
+        );
         break;
       }
 
@@ -309,8 +422,8 @@ export const paymentWebhook = async (req, res) => {
         const userId = data.customData?.userId;
         if (!userId) break;
         await User.findByIdAndUpdate(userId, {
-          planType: 'free',
-          subscriptionStatus: 'canceled',
+          planType: "free",
+          subscriptionStatus: "canceled",
           paddleSubscriptionId: null,
           paddleScheduledChange: null,
         });
@@ -321,7 +434,9 @@ export const paymentWebhook = async (req, res) => {
       case EventName.SubscriptionPastDue: {
         const userId = data.customData?.userId;
         if (!userId) break;
-        await User.findByIdAndUpdate(userId, { subscriptionStatus: 'past_due' });
+        await User.findByIdAndUpdate(userId, {
+          subscriptionStatus: "past_due",
+        });
         console.log(`  → User ${userId} past due`);
         break;
       }

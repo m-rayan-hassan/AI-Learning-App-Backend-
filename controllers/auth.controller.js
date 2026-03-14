@@ -70,7 +70,9 @@ export const getProfile = async (req, res) => {
       planType: user.planType,
       subscriptionStatus: user.subscriptionStatus,
       subscriptionEndDate: user.subscriptionEndDate,
-      paddleScheduledChange: user.paddleScheduledChange
+      paddleScheduledChange: user.paddleScheduledChange,
+      quotas: user.quotas,
+      createdAt: user.createdAt,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
