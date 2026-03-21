@@ -358,16 +358,19 @@ export const paymentWebhook = async (req, res) => {
         const userId = data.customData?.userId;
         if (!userId) break;
 
+        const isCanceled = data.status === "canceled";
+
         // Before updating, get their current plan from DB if we need to see if it changed
         const userToUpdate = await User.findById(userId).select("planType");
         const priceId = data.items?.[0]?.price?.id;
-        const newPlanType = getPlanFromPriceId(priceId);
+        // If the subscription is canceled, force planType to "free"
+        const newPlanType = isCanceled ? "free" : getPlanFromPriceId(priceId);
 
         const fields = {
           planType: newPlanType,
           subscriptionStatus: data.status || "active",
           paddleCustomerId: data.customerId,
-          paddleSubscriptionId: data.id,
+          paddleSubscriptionId: isCanceled ? null : data.id,
           subscriptionEndDate: data.currentBillingPeriod?.endsAt
             ? new Date(data.currentBillingPeriod.endsAt)
             : null,
@@ -376,21 +379,28 @@ export const paymentWebhook = async (req, res) => {
             : null,
         };
 
-        // If their plan actually changed to a higher tier, reset their quotas immediately
-        if (
-          userToUpdate &&
-          userToUpdate.planType !== newPlanType &&
-          newPlanType !== "free"
-        ) {
+        if (isCanceled) {
+          // Subscription is canceled → reset quotas and clear scheduled change
           Object.assign(fields, getQuotaResetFields());
+          fields.paddleScheduledChange = null;
+        } else {
+          // If their plan actually changed to a higher tier, reset their quotas immediately
+          if (
+            userToUpdate &&
+            userToUpdate.planType !== newPlanType &&
+            newPlanType !== "free"
+          ) {
+            Object.assign(fields, getQuotaResetFields());
+          }
+
+          if (data.scheduledChange) {
+            fields.paddleScheduledChange = {
+              action: data.scheduledChange.action,
+              effectiveAt: data.scheduledChange.effectiveAt,
+            };
+          }
         }
 
-        if (data.scheduledChange) {
-          fields.paddleScheduledChange = {
-            action: data.scheduledChange.action,
-            effectiveAt: data.scheduledChange.effectiveAt,
-          };
-        }
         await User.findByIdAndUpdate(userId, fields);
         console.log(
           `  → User ${userId} updated: ${fields.planType} (${fields.subscriptionStatus})`,
@@ -426,8 +436,9 @@ export const paymentWebhook = async (req, res) => {
           subscriptionStatus: "canceled",
           paddleSubscriptionId: null,
           paddleScheduledChange: null,
+          ...getQuotaResetFields(),
         });
-        console.log(`  → User ${userId} canceled`);
+        console.log(`  → User ${userId} canceled → reset to free`);
         break;
       }
 
