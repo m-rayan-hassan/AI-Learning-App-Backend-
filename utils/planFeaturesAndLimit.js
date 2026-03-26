@@ -10,22 +10,22 @@ export const userPlans = {
     docs: 10,
     flashcards: 30,
     quizzes: 30,
-    voice: 1,
-    video: 2,
+    voice: 2,
+    video: 3,
   },
   "pro": {
     docs: 15,
     flashcards: 45,
     quizzes: 45,
-    voice: 2,
-    video: 3,
+    voice: 5,
+    video: 5,
   },
   "premium": {
     docs: 20,
     flashcards: 60,
     quizzes: 60,
-    voice: 5,
-    video: 5,
+    voice: 10,
+    video: 10,
   },
 };
 

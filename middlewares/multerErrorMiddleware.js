@@ -4,7 +4,7 @@ export const multerErrorHandler = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
-        message: "File too large. Max size is 50MB",
+        message: "File too large. Max size is 10MB",
       });
     }
 
@@ -19,7 +19,7 @@ export const multerErrorHandler = (err, req, res, next) => {
     });
   }
 
-  if (err.message === "Invalid file type") {
+  if (err.message && err.message.includes("Invalid file type")) {
     return res.status(400).json({
       message: err.message,
     });
