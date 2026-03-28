@@ -62,34 +62,54 @@ export const generateFlashcards = async (req, res, next) => {
       });
     }
 
-    const content = document.extractedText;
-
-    const cards = await aiFunctionalities.generateFlashcards(
-      content,
-      parseInt(count),
-    );
-
-    console.log("Cards generated", cards);
-
     const flashcardSet = await Flashcard.create({
       userId: req.user._id,
       documentId: document._id,
-      cards: cards.map((card) => ({
-        question: card.question,
-        answer: card.answer,
-        difficulty: card.difficulty,
-        reviewCount: 0,
-        isStarted: false,
-      })),
+      cards: [],
+      isGenerated: false,
+      generationStatus: "pending",
     });
-
-    await user.incrementQuota("flashcard");
 
     res.status(201).json({
       success: true,
-      data: flashcardSet,
-      message: "Flashcards generated successfully",
+      message: "Flashcards are being generated",
     });
+
+    (async () => {
+      try {
+        const content = document.extractedText;
+
+        const cards = await aiFunctionalities.generateFlashcards(
+          content,
+          parseInt(count),
+        );
+
+        console.log("Cards generated", cards);
+
+        flashcardSet.cards = cards.map((card) => ({
+          question: card.question,
+          answer: card.answer,
+          difficulty: card.difficulty,
+          reviewCount: 0,
+          isStarted: false,
+        }));
+
+        flashcardSet.isGenerated = true;
+        flashcardSet.generationStatus = "completed";
+
+        await flashcardSet.save();
+
+        await user.incrementQuota("flashcard");
+      } catch (error) {
+        console.error("Error generating flashcards", error);
+        try {
+          flashcardSet.generationStatus = "failed";
+          await flashcardSet.save();
+        } catch (cleanupErr) {
+          console.error("Failed to mark flashcard generation as failed", cleanupErr);
+        }
+      }
+    })();
   } catch (error) {
     next(error);
   }
@@ -137,31 +157,49 @@ export const generateQuiz = async (req, res, next) => {
       });
     }
 
-    console.log("number of questions: ", numQuestions);
-
-    const content = document.extractedText;
-    const questions = await aiFunctionalities.generateQuiz(
-      content,
-      parseInt(numQuestions),
-    );
-
     const quiz = await Quiz.create({
       userId: req.user._id,
       documentId: document._id,
       title: title || `${document.title} - Quiz`,
-      questions: questions,
-      totalQuestions: questions.length,
+      questions: [],
+      totalQuestions: parseInt(numQuestions) || 5, // Just setting the intended length or 0
       userAnswers: [],
       score: 0,
+      isGenerated: false,
+      generationStatus: "pending",
     });
 
-    await user.incrementQuota("quiz");
-
-    res.status(200).json({
+    res.status(201).json({
       success: true,
-      data: quiz,
-      message: "Quiz generated successfully",
+      message: "Quiz is being generated",
     });
+
+    (async () => {
+      try {
+        const content = document.extractedText;
+        const questions = await aiFunctionalities.generateQuiz(
+          content,
+          parseInt(numQuestions),
+        );
+
+        quiz.questions = questions;
+        quiz.totalQuestions = questions.length;
+        quiz.isGenerated = true;
+        quiz.generationStatus = "completed";
+
+        await quiz.save();
+
+        await user.incrementQuota("quiz");
+      } catch (error) {
+        console.error("Error generating quiz", error);
+        try {
+          quiz.generationStatus = "failed";
+          await quiz.save();
+        } catch (cleanupErr) {
+          console.error("Failed to mark quiz generation as failed", cleanupErr);
+        }
+      }
+    })();
   } catch (error) {
     next(error);
   }
@@ -409,48 +447,66 @@ export const generateVoiceOverview = async (req, res, next) => {
       });
     }
 
-    const content = document.extractedText;
-
-    const voiceScript =
-      await aiFunctionalities.generateVoiceOverviewScript(content);
-
-    voiceOverviewFilePath = await voiceFunctionalities.generateVoice(
-      voiceScript,
-      document._id,
-    );
-
-    const voiceOverview = await uploadMedia(
-      voiceOverviewFilePath,
-      "ai-learning-app/voice-overview",
-    );
-
-    const voiceOverviewUrl = voiceOverview.secure_url;
-
-    await VoiceOverview.create({
+    const voiceDoc = await VoiceOverview.create({
       documentId: document._id,
       userId: req.user._id,
       type: "voice",
-      publicId: voiceOverview.public_id,
-      secureUrl: voiceOverviewUrl,
+      isGenerated: false,
+      generationStatus: "pending",
     });
 
-    await user.incrementQuota("voiceOverview");
-
-    res.status(200).json({
+    res.status(201).json({
       success: true,
-      message: "Voice overview generated successfully",
-      voice_url: voiceOverviewUrl,
+      message: "Voice overview is being generated",
     });
+
+    (async () => {
+      try {
+        const content = document.extractedText;
+
+        const voiceScript =
+          await aiFunctionalities.generateVoiceOverviewScript(content);
+
+        voiceOverviewFilePath = await voiceFunctionalities.generateVoice(
+          voiceScript,
+          document._id,
+        );
+
+        const voiceOverview = await uploadMedia(
+          voiceOverviewFilePath,
+          "ai-learning-app/voice-overview",
+        );
+
+        const voiceOverviewUrl = voiceOverview.secure_url;
+
+        voiceDoc.publicId = voiceOverview.public_id;
+        voiceDoc.secureUrl = voiceOverviewUrl;
+        voiceDoc.isGenerated = true;
+        voiceDoc.generationStatus = "completed";
+
+        await voiceDoc.save();
+
+        await user.incrementQuota("voiceOverview");
+      } catch (error) {
+        console.error("Error generating voice overview", error);
+        try {
+          voiceDoc.generationStatus = "failed";
+          await voiceDoc.save();
+        } catch (cleanupErr) {
+          console.error("Failed to mark voice generation as failed", cleanupErr);
+        }
+      } finally {
+        if (voiceOverviewFilePath) {
+          try {
+            await fs.unlink(path.resolve(voiceOverviewFilePath));
+          } catch (err) {
+            console.error("Failed to delete temp voice file:", err);
+          }
+        }
+      }
+    })();
   } catch (error) {
     next(error);
-  } finally {
-    if (voiceOverviewFilePath) {
-      try {
-        await fs.unlink(path.resolve(voiceOverviewFilePath));
-      } catch (err) {
-        console.error("Failed to delete temp voice file:", err);
-      }
-    }
   }
 };
 
@@ -496,54 +552,72 @@ export const generatePodcast = async (req, res, next) => {
       });
     }
 
-    const content = document.extractedText;
-
-    const voice_id1 = "bbGtsRRKUfYO634UxSjz",
-      voice_id2 = "aUNOP2y8xEvi4nZebjIw";
-
-    const podcastScript = await aiFunctionalities.generatePodcast(
-      content,
-      voice_id1,
-      voice_id2,
-    );
-
-    podcastFilePath = await voiceFunctionalities.generatePodcast(
-      podcastScript,
-      document._id,
-    );
-
-    const podcast = await uploadMedia(
-      podcastFilePath,
-      "ai-learning-app/podcast",
-    );
-
-    const podcastUrl = podcast.secure_url;
-
-    await VoiceOverview.create({
+    const podcastDoc = await VoiceOverview.create({
       documentId: document._id,
       userId: req.user._id,
       type: "podcast",
-      publicId: podcast.public_id,
-      secureUrl: podcastUrl,
+      isGenerated: false,
+      generationStatus: "pending",
     });
 
-    await user.incrementQuota("voiceOverview");
-
-    res.status(200).json({
+    res.status(201).json({
       success: true,
-      message: "Podcast generated successfully",
-      podcast_url: podcastUrl,
+      message: "Podcast is being generated",
     });
+
+    (async () => {
+      try {
+        const content = document.extractedText;
+
+        const voice_id1 = "bbGtsRRKUfYO634UxSjz",
+          voice_id2 = "aUNOP2y8xEvi4nZebjIw";
+
+        const podcastScript = await aiFunctionalities.generatePodcast(
+          content,
+          voice_id1,
+          voice_id2,
+        );
+
+        podcastFilePath = await voiceFunctionalities.generatePodcast(
+          podcastScript,
+          document._id,
+        );
+
+        const podcast = await uploadMedia(
+          podcastFilePath,
+          "ai-learning-app/podcast",
+        );
+
+        const podcastUrl = podcast.secure_url;
+
+        podcastDoc.publicId = podcast.public_id;
+        podcastDoc.secureUrl = podcastUrl;
+        podcastDoc.isGenerated = true;
+        podcastDoc.generationStatus = "completed";
+
+        await podcastDoc.save();
+
+        await user.incrementQuota("voiceOverview");
+      } catch (error) {
+        console.error("Error generating podcast", error);
+        try {
+          podcastDoc.generationStatus = "failed";
+          await podcastDoc.save();
+        } catch (cleanupErr) {
+          console.error("Failed to mark podcast generation as failed", cleanupErr);
+        }
+      } finally {
+        if (podcastFilePath) {
+          try {
+            await fs.unlink(path.resolve(podcastFilePath));
+          } catch (err) {
+            console.error("Failed to delete temp podcast file:", err);
+          }
+        }
+      }
+    })();
   } catch (error) {
     next(error);
-  } finally {
-    if (podcastFilePath) {
-      try {
-        await fs.unlink(path.resolve(podcastFilePath));
-      } catch (err) {
-        console.error("Failed to delete temp podcast file:", err);
-      }
-    }
   }
 };
 
@@ -594,109 +668,131 @@ export const generateVideo = async (req, res, next) => {
       });
     }
 
-    tempAudioDir = path.join(
-      process.cwd(),
-      "temp_audio",
-      document._id.toString(),
-    );
-    tempVideoDir = path.join(
-      process.cwd(),
-      "temp_video",
-      document._id.toString(),
-    );
-
-    const content = document.extractedText;
-    const videoContent = await aiFunctionalities.generateVideoContent(content);
-    console.log("Video content", videoContent);
-
-    const slideCount = videoContent.slideCount;
-
-    const gammaPrompt = constructGammaPrompt(videoContent);
-    const gammaId = await startGammaGeneration(gammaPrompt, slideCount);
-
-    console.log("Gamma ID: ", gammaId);
-
-    const gammaUrl = await getGammaUrl(gammaId);
-    console.log("Gamma Url: ", gammaUrl);
-
-    const audioScript = await voiceFunctionalities.generateVideoScript(
-      videoContent,
-      document._id,
-    );
-    const silentVidoPath = await enqueueRecording(
-      gammaUrl,
-      audioScript,
-      document._id,
-    );
-    finalVideoPath = await stitchAudioAndVideo(
-      silentVidoPath,
-      audioScript,
-      document._id,
-    );
-
-    const video = await uploadMedia(finalVideoPath, "ai-learning-app/videos");
-
-    const videoUrl = video.secure_url;
-    console.log("Video Url: ", videoUrl);
-
-    await VideoOverview.create({
+    const videoDoc = await VideoOverview.create({
       documentId: document._id,
       userId: req.user._id,
-      publicId: video.public_id,
-      secureUrl: videoUrl,
+      isGenerated: false,
+      generationStatus: "pending",
     });
 
-    await user.incrementQuota("video");
-
-    return res.status(200).json({
+    res.status(201).json({
       success: true,
-      message: "Video generated successfully",
-      data: videoUrl,
+      message: "Video is being generated",
     });
+
+    (async () => {
+      try {
+        tempAudioDir = path.join(
+          process.cwd(),
+          "temp_audio",
+          document._id.toString(),
+        );
+        tempVideoDir = path.join(
+          process.cwd(),
+          "temp_video",
+          document._id.toString(),
+        );
+
+        const content = document.extractedText;
+        const videoContent =
+          await aiFunctionalities.generateVideoContent(content);
+        console.log("Video content", videoContent);
+
+        const slideCount = videoContent.slideCount;
+
+        const gammaPrompt = constructGammaPrompt(videoContent);
+        const gammaId = await startGammaGeneration(gammaPrompt, slideCount);
+
+        console.log("Gamma ID: ", gammaId);
+
+        const gammaUrl = await getGammaUrl(gammaId);
+        console.log("Gamma Url: ", gammaUrl);
+
+        const audioScript = await voiceFunctionalities.generateVideoScript(
+          videoContent,
+          document._id,
+        );
+        const silentVidoPath = await enqueueRecording(
+          gammaUrl,
+          audioScript,
+          document._id,
+        );
+        finalVideoPath = await stitchAudioAndVideo(
+          silentVidoPath,
+          audioScript,
+          document._id,
+        );
+
+        const video = await uploadMedia(
+          finalVideoPath,
+          "ai-learning-app/videos",
+        );
+
+        const videoUrl = video.secure_url;
+        console.log("Video Url: ", videoUrl);
+
+        videoDoc.publicId = video.public_id;
+        videoDoc.secureUrl = videoUrl;
+        videoDoc.isGenerated = true;
+        videoDoc.generationStatus = "completed";
+
+        await videoDoc.save();
+
+        await user.incrementQuota("video");
+      } catch (error) {
+        console.error("Error generating video", error);
+        try {
+          videoDoc.generationStatus = "failed";
+          await videoDoc.save();
+        } catch (cleanupErr) {
+          console.error("Failed to mark video generation as failed", cleanupErr);
+        }
+      } finally {
+        try {
+          if (
+            finalVideoPath &&
+            (await fs
+              .stat(path.resolve(finalVideoPath))
+              .then(() => true)
+              .catch(() => false))
+          ) {
+            await fs.unlink(path.resolve(finalVideoPath));
+          }
+        } catch (err) {
+          console.error("Failed to clean up final video path:", err);
+        }
+
+        try {
+          if (
+            tempAudioDir &&
+            (await fs
+              .stat(tempAudioDir)
+              .then(() => true)
+              .catch(() => false))
+          ) {
+            await fs.rm(tempAudioDir, { recursive: true, force: true });
+          }
+        } catch (err) {
+          console.error("Failed to clean up temp audio dir:", err);
+        }
+
+        try {
+          if (
+            tempVideoDir &&
+            (await fs
+              .stat(tempVideoDir)
+              .then(() => true)
+              .catch(() => false))
+          ) {
+            await fs.rm(tempVideoDir, { recursive: true, force: true });
+          }
+        } catch (err) {
+          console.error("Failed to clean up temp video dir:", err);
+        }
+      }
+    })();
   } catch (error) {
     next(error);
-  } finally {
-    try {
-      if (
-        finalVideoPath &&
-        (await fs
-          .stat(path.resolve(finalVideoPath))
-          .then(() => true)
-          .catch(() => false))
-      ) {
-        await fs.unlink(path.resolve(finalVideoPath));
-      }
-    } catch (err) {
-      console.error("Failed to clean up final video path:", err);
-    }
-
-    try {
-      if (
-        tempAudioDir &&
-        (await fs
-          .stat(tempAudioDir)
-          .then(() => true)
-          .catch(() => false))
-      ) {
-        await fs.rm(tempAudioDir, { recursive: true, force: true });
-      }
-    } catch (err) {
-      console.error("Failed to clean up temp audio dir:", err);
-    }
-
-    try {
-      if (
-        tempVideoDir &&
-        (await fs
-          .stat(tempVideoDir)
-          .then(() => true)
-          .catch(() => false))
-      ) {
-        await fs.rm(tempVideoDir, { recursive: true, force: true });
-      }
-    } catch (err) {
-      console.error("Failed to clean up temp video dir:", err);
-    }
   }
 };
 
@@ -726,15 +822,15 @@ export const getVoiceOverviewUrl = async (req, res, next) => {
       });
     }
 
-    const voiceOverview = await VoiceOverview.findOne({
+    const voiceOverviews = await VoiceOverview.find({
       documentId: document._id,
       userId: req.user._id,
-    }).select("secureUrl type");
+    }).select("secureUrl type isGenerated generationStatus");
 
     return res.status(200).json({
       success: true,
-      message: "Voice Overview fetched successfully",
-      data: voiceOverview,
+      message: "Voice Overviews fetched successfully",
+      data: voiceOverviews,
     });
   } catch (error) {
     next(error);
@@ -775,7 +871,61 @@ export const getVideoUrl = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       message: "Video Overview fetched successfully",
-      data: videoOverview?.secureUrl,
+      data: videoOverview,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteVoiceOverview = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const voiceOverview = await VoiceOverview.findOne({
+      _id: id,
+      userId: req.user._id,
+    });
+
+    if (!voiceOverview) {
+      return res.status(404).json({
+        success: false,
+        error: "Voice overview not found",
+        statusCode: 404,
+      });
+    }
+
+    await voiceOverview.deleteOne();
+
+    return res.status(200).json({
+      success: true,
+      message: "Voice overview deleted successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteVideoOverview = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const videoOverview = await VideoOverview.findOne({
+      _id: id,
+      userId: req.user._id,
+    });
+
+    if (!videoOverview) {
+      return res.status(404).json({
+        success: false,
+        error: "Video overview not found",
+        statusCode: 404,
+      });
+    }
+
+    await videoOverview.deleteOne();
+
+    return res.status(200).json({
+      success: true,
+      message: "Video overview deleted successfully",
     });
   } catch (error) {
     next(error);

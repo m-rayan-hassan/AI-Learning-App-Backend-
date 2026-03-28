@@ -41,6 +41,15 @@ const flashCardSchema = new mongoose.Schema(
         },
       },
     ],
+    isGenerated: {
+      type: Boolean,
+      required: true,
+      default: false
+    },
+    generationStatus: {
+      type: String,
+      enum: ["pending", "completed", "failed"],
+    },
   },
   {
     timestamps: true,

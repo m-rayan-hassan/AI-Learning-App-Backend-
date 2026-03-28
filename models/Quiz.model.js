@@ -78,6 +78,15 @@ const quizSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    isGenerated: {
+      type: Boolean,
+      required: true,
+      default: false
+    },
+    generationStatus: {
+      type: String,
+      enum: ["pending", "completed", "failed"],
+    },
   },
   {
     timestamps: true,

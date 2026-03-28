@@ -14,6 +14,8 @@ import {
   testRecorder,
   getVoiceOverviewUrl,
   getVideoUrl,
+  deleteVoiceOverview,
+  deleteVideoOverview,
 } from "../controllers/ai.controller.js";
 
 const router = expresss.Router();
@@ -33,5 +35,7 @@ router.post("/generate-podcast", generatePodcast);
 router.post("/generate-video", generateVideo);
 router.get("/voice-overview-url/:documentId", getVoiceOverviewUrl);
 router.get("/video-overview-url/:documentId", getVideoUrl);
+router.delete("/voice-overview/:id", deleteVoiceOverview);
+router.delete("/video-overview/:id", deleteVideoOverview);
 
 export default router;

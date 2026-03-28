@@ -14,11 +14,20 @@ const videoSchema = new mongoose.Schema(
     },
     publicId: {
       type: String,
-      required: true,
+      required: false,
     },
     secureUrl: {
       type: String,
+      required: false,
+    },
+    isGenerated: {
+      type: Boolean,
       required: true,
+      default: false,
+    },
+    generationStatus: {
+      type: String,
+      enum: ["pending", "completed", "failed"],
     },
   },
   {
