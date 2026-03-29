@@ -459,10 +459,10 @@ export const generateVoiceOverviewScript = async (content) => {
 - **Pacing:** Vary your sentence length. Short punchy sentences for impact. Longer flowing sentences for explanation. This creates a natural listening rhythm.
 
 **Content Requirements:**
-- Cover ALL major concepts from the provided content — don't skip important ideas
+- Cover ALL major concepts and details from the provided content. You MUST profoundly explain each topic in high detail instead of just mentioning it in passing. Provide complete, comprehensive explanations so the listener truly learns the material. Do NOT summarize too heavily or skip any important details.
 - Start with a compelling hook that draws the listener in immediately (NOT "Welcome to..." or "Today we'll discuss...")
 - End with a satisfying conclusion that ties the key ideas together and leaves the listener feeling accomplished
-- Total length: substantial enough to cover the material properly (aim for 3-6 minutes of speaking time)
+- Total length: substantial enough to cover the material thoroughly in deep detail (aim for a longer script, around 5-10 minutes of speaking time, outputting a very long and comprehensive script).
 
 **STRICT Output Constraints:**
 - Output ONLY the raw script text. Nothing else.
@@ -699,8 +699,9 @@ Set the "theme" field in your JSON output to one of these exact strings.
 - Voiceover and visual content **MUST match** in pacing and subject.
 - **LAYOUT VARIETY IS MANDATORY**: Do NOT use the same layout for more than 2 consecutive slides. Mix visual types throughout.
 
-### 3. Visually Driven, Ultra-Concise Text
+### 3. Visually Driven, Ultra-Concise Text & Comprehensive Voiceover
 - **HARD RULE — NO WALLS OF TEXT**: Every text element on a slide MUST be under 8 words. The voiceover does ALL heavy explanatory lifting.
+- **COMPREHENSIVE VOICEOVER (CRITICAL)**: The \`voiceover_script\` MUST explicitly mention and thoroughly explain EVERY SINGLE POINT, bullet, or step shown on the slide. Do not skip any items. The explanation should be detailed, educational, and engaging, leaving no text element unexplained.
 - Bullets, timeline descriptions, column items — all MUST be extremely concise keyword phrases.
 - Provide highly descriptive \`imagePrompt\`s for splitscreen and quote slides.
 
@@ -794,6 +795,7 @@ Return ONLY valid JSON. No markdown, no code blocks, no extra text.
 ✅ No more than 2 consecutive slides with the same layout
 ✅ First slide is "title", last slide is "title" or "quote" for strong closure
 ✅ Every slide has a "voiceover_script" field
+✅ Voiceover script explicitly mentions and thoroughly explains EVERY single bullet/point on the screen
 ✅ Output is valid JSON parseable by JSON.parse()
 `;
 
