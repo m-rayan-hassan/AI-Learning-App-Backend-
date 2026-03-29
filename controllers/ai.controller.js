@@ -18,6 +18,8 @@ import {
 import { enqueueRecording } from "../utils/recordingQueue.js";
 import { stitchAudioAndVideo } from "../utils/stitcher.js";
 import { userPlans } from "../utils/planFeaturesAndLimit.js";
+import { renderVideoRemotion } from "../utils/renderVideoRemotion.js";
+import { getTestSlideData, getTestAudioDurations } from "../utils/aiFunctionalitiesRemotion.js";
 
 export const generateFlashcards = async (req, res, next) => {
   try {
@@ -984,5 +986,204 @@ export const testRecorder = async (req, res, next) => {
         console.error("Failed to clean up test recorder files:", err);
       }
     }
+  }
+};
+
+// ── Test Remotion Pipeline ──
+// Tests the Remotion video renderer with hardcoded slide data.
+// Zero Gamma/ElevenLabs/LLM credits consumed. Fully self-contained.
+export const testRemotionVideo = async (req, res, next) => {
+  let videoPath = "";
+  let tempVideoDir = null;
+
+  try {
+    // 1. Get hardcoded test data (no LLM, no Gamma)
+    const testData = getTestSlideData();
+    const fakeAudio = getTestAudioDurations(testData.slides);
+
+    console.log("🧪 REMOTION TEST — Starting with hardcoded data");
+    console.log(`🧪 REMOTION TEST — ${testData.slides.length} slides, layouts: ${testData.slides.map(s => s.layout).join(', ')}`);
+
+    const docId = `remotion_test_${Date.now()}`;
+    tempVideoDir = path.join(process.cwd(), "temp_video", docId);
+
+    // 2. Render video with Remotion (replaces Puppeteer recorder)
+    const startTime = Date.now();
+    videoPath = await renderVideoRemotion(testData.slides, fakeAudio, docId);
+    const renderTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    console.log(`🧪 REMOTION TEST — Render complete in ${renderTime}s`);
+    console.log("🧪 REMOTION TEST — Video at:", videoPath);
+
+    // 3. Upload to Cloudinary
+    const video = await uploadMedia(videoPath, "ai-learning-app/videos");
+    const videoUrl = video.secure_url;
+    console.log("🧪 REMOTION TEST — Cloudinary URL:", videoUrl);
+
+    return res.status(200).json({
+      success: true,
+      message: "Remotion test passed — video rendered and uploaded!",
+      data: {
+        videoUrl,
+        renderTimeSeconds: parseFloat(renderTime),
+        slideCount: testData.slides.length,
+        layouts: testData.slides.map(s => s.layout),
+      },
+    });
+  } catch (error) {
+    console.error("🧪 REMOTION TEST — Failed:", error.message);
+    next(error);
+  } finally {
+    // Cleanup
+    if (videoPath) {
+      try {
+        await fs.unlink(path.resolve(videoPath)).catch(() => {});
+      } catch (err) {}
+    }
+    if (tempVideoDir) {
+      try {
+        await fs.rm(tempVideoDir, { recursive: true, force: true }).catch(() => {});
+      } catch (err) {}
+    }
+  }
+};
+
+// ── Production Remotion Pipeline ──
+export const generateRemotionVideo = async (req, res, next) => {
+  let finalVideoPath = null;
+  let tempAudioDir = null;
+  let tempVideoDir = null;
+
+  try {
+    const { documentId } = req.body;
+
+    if (!documentId) {
+      return res.status(400).json({
+        success: false,
+        error: "Please provide documentId",
+        statusCode: 400,
+      });
+    }
+
+    const document = await Document.findOne({
+      _id: documentId,
+      userId: req.user._id,
+      status: "ready",
+    });
+
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        error: "Document not found or not ready",
+        statusCode: 404,
+      });
+    }
+
+    const user = await User.findOne({ _id: req.user._id });
+    const userVideoCount = user.quotas.video.count;
+    const userPlan = user.planType;
+
+    if (
+      userVideoCount >= userPlans[userPlan].video &&
+      new Date() < user.quotas.video.resetDate
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Video generation limit reached. Upgrade to generate more.",
+        statusCode: 400,
+      });
+    }
+
+    const videoDoc = await VideoOverview.create({
+      documentId: document._id,
+      userId: req.user._id,
+      isGenerated: false,
+      generationStatus: "pending",
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Remotion video is being generated",
+    });
+
+    // Background job
+    (async () => {
+      try {
+        const docIdStr = document._id.toString();
+        tempAudioDir = path.join(process.cwd(), "temp_audio", docIdStr);
+        tempVideoDir = path.join(process.cwd(), "temp_video", docIdStr);
+
+        const content = document.extractedText;
+        
+        // 1. Generate JSON from LLM
+        const videoContent = await aiFunctionalities.generateRemotionVideoPrompt(content);
+
+        console.log("Video content: ", videoContent);
+        
+        console.log("Remotion LLM Output slides:", videoContent.slides.length);
+
+        // 2. Generate Audio via ElevenLabs
+        // Note: voiceFunctionalities.generateVideoScript already handles iterating over the slides
+        // and calling ElevenLabs, saving files to temp_audio, and returning an array of paths/durations.
+        // We ensure we pass the newly structured JSON (videoContent.slides array contains .voiceover_script).
+        const audioScript = await voiceFunctionalities.generateVideoScript(videoContent, document._id);
+
+        // Extract audio durations in the format Remotion expects
+        const audioDurations = audioScript.map(ad => ({
+          index: ad.index,
+          duration: ad.duration,
+          filePath: ad.filePath
+        }));
+
+        // 3. Render raw offline MP4 with Remotion
+        const silentVideoPath = await renderVideoRemotion(
+          videoContent.slides,
+          audioDurations,
+          docIdStr
+        );
+
+        // 4. Stitch audio logic (FFmpeg)
+        finalVideoPath = await stitchAudioAndVideo(
+          silentVideoPath,
+          audioScript,
+          document._id
+        );
+
+        // 5. Upload to Cloudinary
+        const video = await uploadMedia(finalVideoPath, "ai-learning-app/videos");
+        const videoUrl = video.secure_url;
+        console.log("Remotion Video Url:", videoUrl);
+
+        videoDoc.publicId = video.public_id;
+        videoDoc.secureUrl = videoUrl;
+        videoDoc.isGenerated = true;
+        videoDoc.generationStatus = "completed";
+
+        await videoDoc.save();
+        await user.incrementQuota("video");
+      } catch (error) {
+        console.error("Error generating remotion video", error);
+        try {
+          videoDoc.generationStatus = "failed";
+          await videoDoc.save();
+        } catch (cleanupErr) {
+          console.error("Failed to mark video generation as failed", cleanupErr);
+        }
+      } finally {
+        try {
+          if (finalVideoPath) await fs.unlink(path.resolve(finalVideoPath)).catch(() => {});
+        } catch (err) {}
+
+        try {
+          if (tempAudioDir) await fs.rm(tempAudioDir, { recursive: true, force: true }).catch(() => {});
+        } catch (err) {}
+
+        try {
+          if (tempVideoDir) await fs.rm(tempVideoDir, { recursive: true, force: true }).catch(() => {});
+        } catch (err) {}
+      }
+    })();
+  } catch (error) {
+    next(error);
   }
 };

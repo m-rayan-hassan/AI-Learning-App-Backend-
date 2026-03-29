@@ -6,3 +6,5 @@ temp_video/*
 public/videos/*
 .git
 *.md
+build/*
+.remotion/*

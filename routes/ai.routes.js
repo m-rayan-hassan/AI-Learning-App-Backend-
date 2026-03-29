@@ -16,11 +16,14 @@ import {
   getVideoUrl,
   deleteVoiceOverview,
   deleteVideoOverview,
+  testRemotionVideo,
+  generateRemotionVideo,
 } from "../controllers/ai.controller.js";
 
 const router = expresss.Router();
 
 router.get("/test-recorder", testRecorder); // TEMP — remove after production testing
+router.get("/test-remotion-video", testRemotionVideo); // TEMP — test Remotion pipeline
 
 router.use(protect);
 
@@ -33,6 +36,7 @@ router.get("/chat-history/:documentId", chatHistory);
 router.post("/generate-voice-overview", generateVoiceOverview);
 router.post("/generate-podcast", generatePodcast);
 router.post("/generate-video", generateVideo);
+router.post("/generate-remotion-video", generateRemotionVideo);
 router.get("/voice-overview-url/:documentId", getVoiceOverviewUrl);
 router.get("/video-overview-url/:documentId", getVideoUrl);
 router.delete("/voice-overview/:id", deleteVoiceOverview);

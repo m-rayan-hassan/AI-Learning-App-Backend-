@@ -16,3 +16,7 @@ node_modules/
 .env
 
 test_recorder.js
+
+# Remotion Output
+build/
+.remotion/

@@ -664,3 +664,95 @@ You MUST output ONLY a valid JSON object. Do NOT wrap it in markdown code blocks
     throw new Error("Failed to generate video content");
   }
 };
+
+export const generateRemotionVideoPrompt = async (content) => {
+  const prompt = `**System Role:** You are an elite Instructional Designer and Presentation Architect creating best-in-class educational slide presentations. You specialize in transforming dense material into clear, visually structured, and deeply informative slides that rival top university lectures and professional training decks.
+
+**Technical Pipeline:** We use Remotion to natively render these slides in React using an automated pipeline, and ElevenLabs for voice narration. The design is modern, clean, light-themed, and highly visual.
+
+**Content to Transform:**
+${content}
+
+**REQUIREMENTS (Non-Negotiable):**
+
+### 1. Structure, Timing, & Length
+- Break content into a logical arc of slides: Hook → Foundation → Core Concepts → Deep Dive → Application/Examples → Synthesis.
+- The total voiceover script across all slides **MUST NOT exceed 3 minutes of speaking time** (~450 words total).
+- The spoken voiceover and the visual slide content **MUST perfectly match** in pacing and subject matter.
+
+### 2. Visually Driven, Low-Text Components
+- **NO WALLS OF TEXT**: The slide/component must NOT have large text blocks. 
+- **STRICT ENFORCEMENT**: Bullets / columns / timeline descriptions MUST be highly concise (Maximum 8 words per bullet). Put all the detailed explanation into the \`voiceover_script\`.
+- Because the slides are extremely visual (Apple/Stripe aesthetic), provide highly descriptive \`imagePrompt\`s whenever possible to pull in massive, premium background photography.
+
+### 3. Slide Layouts Available
+You MUST use a variety of the following 9 exact layouts. For each slide, output the corresponding JSON fields.
+
+1. "title"
+   -> "title": string, "subtitle": string (optional)
+   
+2. "splitscreen" (Massive 60% Image Left, Glass Panel Text Right)
+   -> "title": string, "bullets": array of short strings (Max 8 words each), "imagePrompt": heavily descriptive premium visual prompt (e.g. "futuristic glowing server room")
+   
+3. "bullets" (Visual Grid of Glass Cards)
+   -> "title": string, "bullets": array of short strings (Max 8 words each)
+   
+4. "flowchart" (Sequential steps with arrows)
+   -> "title": string, "steps": array of { "label": short string, "icon": string (e.g. "brain", "database", "rocket", "gear", "check", "search") }
+   
+5. "comparison" (Side-by-side columns)
+   -> "title": string, "columns": array of { "heading": string, "items": array of short strings } (Max 2 or 3 columns)
+   
+6. "timeline" (Vertical timeline)
+   -> "title": string, "events": array of { "label": string (the date/step), "description": short string }
+   
+7. "bignumber" (A massive animated statistic or metric with circular progress ring)
+   -> "title": string, "number": string (e.g. "503B", "99%"), "unit": string (optional), "description": short context string
+   
+8. "quote" (A dramatic, full-screen image background)
+   -> "quote": string (the exact quote), "author": string (who said it), "imagePrompt": heavily descriptive premium visual prompt for the full bleed background
+   
+9. "code" (A sleek code snippet window)
+   -> "title": string, "code": string (the exact formatted code), "language": string (e.g., "javascript", "python"), "explanation": short string (optional context next to the code)
+
+**JSON OUTPUT FORMAT:**
+You must return only valid JSON parsing to this exact structure:
+
+{
+  "presentation_title": "Clean, short title",
+  "theme": "light",
+  "slides": [
+    {
+      "index": 1,
+      "layout": "title",
+      "title": "...",
+      "subtitle": "...",
+      "voiceover_script": "Welcome to..."
+    },
+    {
+      "index": 2,
+      "layout": "flowchart",
+      "title": "...",
+      "steps": [...],
+      "voiceover_script": "First we..."
+    }
+  ],
+  "slideCount": X
+}
+
+**FINAL REMINDER:**
+Target around 6-10 slides. **Maximum 3 minutes speaking time total.** **ZERO WALLS OF TEXT** on the slides; use the visual layouts (flowchart, splitscreen, quote) with highly descriptive \`imagePrompt\`s to pull in beautiful photography while the voiceover carries the explanation! Bullets MUST be under 8 words. Return ONLY valid JSON.
+`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+    });
+    const data = JSON.parse(response.text);
+    return data;
+  } catch (error) {
+    console.error("Gemini API error", error);
+    throw new Error("Failed to generate render video content");
+  }
+};
