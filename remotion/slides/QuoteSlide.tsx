@@ -1,36 +1,42 @@
 import React from 'react';
 import { useCurrentFrame, interpolate, spring, useVideoConfig } from 'remotion';
 import { theme, SLIDE_WIDTH, SLIDE_HEIGHT } from '../theme';
+import type { ThemeColors } from '../theme';
 
 interface QuoteSlideProps {
   quote: string;
   author?: string;
-  imagePrompt?: string; // We map this to a background
+  imagePrompt?: string;
+  themeColors: ThemeColors;
 }
 
-export const QuoteSlide: React.FC<QuoteSlideProps> = ({ quote, author, imagePrompt }) => {
+export const QuoteSlide: React.FC<QuoteSlideProps> = ({ quote, author, imagePrompt, themeColors }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Quote mark animation
   const quoteMarkSpring = spring({ frame, fps, config: { damping: 12, stiffness: 60 } });
   const quoteMarkScale = interpolate(quoteMarkSpring, [0, 1], [0, 1]);
-  const quoteMarkOpacity = interpolate(quoteMarkSpring, [0, 1], [0, 0.4]); 
+  const quoteMarkOpacity = interpolate(quoteMarkSpring, [0, 1], [0, 0.35]);
 
-  // Text animation
   const textSpring = spring({ frame: frame - 15, fps, config: { damping: 16, stiffness: 80 } });
   const textOpacity = interpolate(textSpring, [0, 1], [0, 1]);
   const textY = interpolate(textSpring, [0, 1], [40, 0]);
 
-  // Author animation
   const authorSpring = spring({ frame: frame - 30, fps, config: { damping: 14, stiffness: 70 } });
   const authorOpacity = interpolate(authorSpring, [0, 1], [0, 1]);
   const authorY = interpolate(authorSpring, [0, 1], [20, 0]);
 
-  // Fast pure-CSS cinematic background (zero network footprint)
   const hash = (imagePrompt || 'default').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const hue1 = (hash * 43) % 360;
   const hue2 = (hue1 + 60) % 360;
+
+  // Slow parallax drift
+  const driftX = interpolate(frame, [0, 300], [0, -10], { extrapolateRight: 'clamp' });
+  const driftScale = interpolate(frame, [0, 300], [1, 1.08], { extrapolateRight: 'clamp' });
+
+  // Auto-scale quote for long strings
+  const quoteLen = quote.length;
+  const quoteFontSize = quoteLen > 200 ? theme.fontSize.h2 : quoteLen > 120 ? theme.fontSize.h1 : theme.fontSize.hero * 1.1;
 
   return (
     <div
@@ -38,7 +44,7 @@ export const QuoteSlide: React.FC<QuoteSlideProps> = ({ quote, author, imageProm
         boxSizing: 'border-box',
         width: SLIDE_WIDTH,
         height: SLIDE_HEIGHT,
-        background: '#0a0a0a', // Solid dark behind image
+        background: '#0a0a0a',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -49,16 +55,31 @@ export const QuoteSlide: React.FC<QuoteSlideProps> = ({ quote, author, imageProm
         padding: theme.spacing.xl * 2,
       }}
     >
+      {/* Rich cinematic background */}
       <div
         style={{
           position: 'absolute',
-          inset: 0,
-          background: `radial-gradient(ellipse at 50% 50%, hsl(${hue1}, 20%, 25%) 0%, hsl(${hue2}, 30%, 10%) 100%)`,
+          inset: -20,
+          background: `radial-gradient(ellipse at 50% 50%, hsl(${hue1}, 25%, 25%) 0%, hsl(${hue2}, 30%, 8%) 100%)`,
+          zIndex: 0,
+          transform: `translateX(${driftX}px) scale(${driftScale})`,
+        }}
+      />
+      {/* Accent light */}
+      <div
+        style={{
+          position: 'absolute',
+          width: 600,
+          height: 600,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${themeColors.primary}20 0%, transparent 60%)`,
+          top: '20%',
+          left: '15%',
           zIndex: 0,
         }}
       />
-      {/* Cinematic dark vignette overlay */}
-      <div 
+      {/* Vignette */}
+      <div
         style={{
           position: 'absolute',
           inset: 0,
@@ -67,17 +88,17 @@ export const QuoteSlide: React.FC<QuoteSlideProps> = ({ quote, author, imageProm
         }}
       />
 
-      {/* Giant stylistic quote mark in background */}
+      {/* Giant quotation mark */}
       <div
         style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
           transform: `translate(-50%, -50%) scale(${quoteMarkScale})`,
-          fontSize: 800,
+          fontSize: 700,
           fontWeight: 900,
           fontFamily: 'Georgia, serif',
-          color: theme.colors.primary,
+          color: themeColors.primary,
           opacity: quoteMarkOpacity,
           lineHeight: 1,
           zIndex: 2,
@@ -87,13 +108,12 @@ export const QuoteSlide: React.FC<QuoteSlideProps> = ({ quote, author, imageProm
         "
       </div>
 
-      <div style={{ position: 'relative', zIndex: 10, textAlign: 'center', maxWidth: 1200 }}>
-        {/* The Quote itself */}
+      <div style={{ position: 'relative', zIndex: 10, textAlign: 'center', maxWidth: 1100 }}>
         <h2
           style={{
-            fontSize: theme.fontSize.hero * 1.1,
+            fontSize: quoteFontSize,
             fontWeight: 700,
-            color: '#ffffff', // Force white for cinematic image background
+            color: '#ffffff',
             opacity: textOpacity,
             transform: `translateY(${textY}px)`,
             lineHeight: 1.3,
@@ -106,7 +126,6 @@ export const QuoteSlide: React.FC<QuoteSlideProps> = ({ quote, author, imageProm
           "{quote}"
         </h2>
 
-        {/* The Author (optional) */}
         {author && (
           <div
             style={{
@@ -119,12 +138,12 @@ export const QuoteSlide: React.FC<QuoteSlideProps> = ({ quote, author, imageProm
               gap: theme.spacing.md,
             }}
           >
-            <div style={{ width: 60, height: 3, background: theme.colors.primary }} />
+            <div style={{ width: 60, height: 3, background: themeColors.primary }} />
             <p
               style={{
                 fontSize: theme.fontSize.h2,
                 fontWeight: 700,
-                color: theme.colors.primaryLight,
+                color: themeColors.primaryLight,
                 margin: 0,
                 textTransform: 'uppercase',
                 letterSpacing: 4,
@@ -133,7 +152,7 @@ export const QuoteSlide: React.FC<QuoteSlideProps> = ({ quote, author, imageProm
             >
               {author}
             </p>
-            <div style={{ width: 60, height: 3, background: theme.colors.primary }} />
+            <div style={{ width: 60, height: 3, background: themeColors.primary }} />
           </div>
         )}
       </div>

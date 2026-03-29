@@ -1009,7 +1009,7 @@ export const testRemotionVideo = async (req, res, next) => {
 
     // 2. Render video with Remotion (replaces Puppeteer recorder)
     const startTime = Date.now();
-    videoPath = await renderVideoRemotion(testData.slides, fakeAudio, docId);
+    videoPath = await renderVideoRemotion(testData.slides, fakeAudio, docId, testData.theme || 'default');
     const renderTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
     console.log(`🧪 REMOTION TEST — Render complete in ${renderTime}s`);
@@ -1139,7 +1139,8 @@ export const generateRemotionVideo = async (req, res, next) => {
         const silentVideoPath = await renderVideoRemotion(
           videoContent.slides,
           audioDurations,
-          docIdStr
+          docIdStr,
+          videoContent.theme || 'default'
         );
 
         // 4. Stitch audio logic (FFmpeg)

@@ -666,82 +666,135 @@ You MUST output ONLY a valid JSON object. Do NOT wrap it in markdown code blocks
 };
 
 export const generateRemotionVideoPrompt = async (content) => {
-  const prompt = `**System Role:** You are an elite Instructional Designer and Presentation Architect creating best-in-class educational slide presentations. You specialize in transforming dense material into clear, visually structured, and deeply informative slides that rival top university lectures and professional training decks.
+  const prompt = `**System Role:** You are an elite Instructional Designer and Presentation Architect creating the most visually stunning, premium educational video presentations in the world. Your presentations outclass Gamma, NotebookLM, and professional keynotes. Every slide must feel like it belongs in a $10,000 pitch deck — zero filler, maximum visual impact.
 
-**Technical Pipeline:** We use Remotion to natively render these slides in React using an automated pipeline, and ElevenLabs for voice narration. The design is modern, clean, light-themed, and highly visual.
+**Technical Pipeline:** We use Remotion (React-based video renderer) with a premium content-adaptive theme system and 15 highly visual slide layouts. ElevenLabs handles voice narration. The visuals are cinema-grade with glassmorphism, animated gradients, and spring-based micro-animations.
 
 **Content to Transform:**
 ${content}
 
-**REQUIREMENTS (Non-Negotiable):**
+---
 
-### 1. Structure, Timing, & Length
-- Break content into a logical arc of slides: Hook → Foundation → Core Concepts → Deep Dive → Application/Examples → Synthesis.
-- The total voiceover script across all slides **MUST NOT exceed 3 minutes of speaking time** (~450 words total).
-- The spoken voiceover and the visual slide content **MUST perfectly match** in pacing and subject matter.
+## REQUIREMENTS (Non-Negotiable):
 
-### 2. Visually Driven, Low-Text Components
-- **NO WALLS OF TEXT**: The slide/component must NOT have large text blocks. 
-- **STRICT ENFORCEMENT**: Bullets / columns / timeline descriptions MUST be highly concise (Maximum 8 words per bullet). Put all the detailed explanation into the \`voiceover_script\`.
-- Because the slides are extremely visual (Apple/Stripe aesthetic), provide highly descriptive \`imagePrompt\`s whenever possible to pull in massive, premium background photography.
+### 1. CONTENT-ADAPTIVE THEME (Critical for Premium Feel)
+You MUST select the most appropriate theme based on the content's subject matter. This determines the entire color palette, gradients, and visual mood of the video.
 
-### 3. Slide Layouts Available
-You MUST use a variety of the following 9 exact layouts. For each slide, output the corresponding JSON fields.
+Available themes:
+- **"tech"** — Dark mode, electric purple + cyan. Use for: programming, AI, software, computer science, cybersecurity, blockchain.
+- **"science"** — Green + teal on light. Use for: biology, chemistry, physics, environmental science, astronomy.
+- **"business"** — Corporate blue on clean white. Use for: economics, management, marketing, finance, MBA topics.
+- **"creative"** — Sunset warm tones. Use for: art, design, music, literature, creative writing, media.
+- **"medical"** — Teal + indigo. Use for: medicine, health, anatomy, nursing, pharmacology, psychology.
+- **"history"** — Warm sepia/gold. Use for: history, political science, law, archaeology, social studies.
+- **"math"** — Purple + blue. Use for: mathematics, statistics, data science, algorithms, logic.
+- **"default"** — Indigo on light. Use for: general/mixed topics or when no specific theme fits.
 
-1. "title"
-   -> "title": string, "subtitle": string (optional)
-   
-2. "splitscreen" (Massive 60% Image Left, Glass Panel Text Right)
-   -> "title": string, "bullets": array of short strings (Max 8 words each), "imagePrompt": heavily descriptive premium visual prompt (e.g. "futuristic glowing server room")
-   
-3. "bullets" (Visual Grid of Glass Cards)
-   -> "title": string, "bullets": array of short strings (Max 8 words each)
-   
-4. "flowchart" (Sequential steps with arrows)
-   -> "title": string, "steps": array of { "label": short string, "icon": string (e.g. "brain", "database", "rocket", "gear", "check", "search") }
-   
-5. "comparison" (Side-by-side columns)
-   -> "title": string, "columns": array of { "heading": string, "items": array of short strings } (Max 2 or 3 columns)
-   
-6. "timeline" (Vertical timeline)
-   -> "title": string, "events": array of { "label": string (the date/step), "description": short string }
-   
-7. "bignumber" (A massive animated statistic or metric with circular progress ring)
-   -> "title": string, "number": string (e.g. "503B", "99%"), "unit": string (optional), "description": short context string
-   
-8. "quote" (A dramatic, full-screen image background)
-   -> "quote": string (the exact quote), "author": string (who said it), "imagePrompt": heavily descriptive premium visual prompt for the full bleed background
-   
-9. "code" (A sleek code snippet window)
-   -> "title": string, "code": string (the exact formatted code), "language": string (e.g., "javascript", "python"), "explanation": short string (optional context next to the code)
+Set the "theme" field in your JSON output to one of these exact strings.
 
-**JSON OUTPUT FORMAT:**
-You must return only valid JSON parsing to this exact structure:
+### 2. Structure, Timing, & Narrative Arc
+- Break content into a logical arc: **Hook → Foundation → Core Concepts → Deep Dive → Application → Synthesis/Takeaway**
+- Target **8-12 slides** for comprehensive coverage with visual variety.
+- Total voiceover across all slides: **MUST NOT exceed 3 minutes** (~450 words total).
+- Voiceover and visual content **MUST match** in pacing and subject.
+- **LAYOUT VARIETY IS MANDATORY**: Do NOT use the same layout for more than 2 consecutive slides. Mix visual types throughout.
+
+### 3. Visually Driven, Ultra-Concise Text
+- **HARD RULE — NO WALLS OF TEXT**: Every text element on a slide MUST be under 8 words. The voiceover does ALL heavy explanatory lifting.
+- Bullets, timeline descriptions, column items — all MUST be extremely concise keyword phrases.
+- Provide highly descriptive \`imagePrompt\`s for splitscreen and quote slides.
+
+### 4. ALL 15 Available Slide Layouts
+
+**Opening/Closing:**
+
+1. **"title"** — Opening/closing dramatic title card
+   → "title": string, "subtitle": string (optional)
+
+2. **"section"** — Section divider to break video into chapters/acts
+   → "sectionNumber": number, "title": string, "subtitle": string (optional)
+
+**Content Layouts:**
+
+3. **"splitscreen"** — 60% rich visual left, glass panel with bullets right
+   → "title": string, "bullets": string[] (max 8 words each), "imagePrompt": descriptive visual prompt
+
+4. **"bullets"** — Grid of numbered glass cards
+   → "title": string, "bullets": string[] (max 8 words each, max 8 items)
+
+5. **"flowchart"** — Sequential orbs connected by animated arrows
+   → "title": string, "steps": [{ "label": short string (max 3 words), "icon": string }] (max 7 steps)
+
+6. **"comparison"** — Side-by-side columns with VS badge
+   → "title": string, "columns": [{ "heading": string, "items": string[] }] (2-4 columns, max 5 items each)
+
+7. **"timeline"** — Alternating left-right vertical timeline
+   → "title": string, "events": [{ "label": string, "description": short string }] (max 6 events)
+
+8. **"bignumber"** — Animated statistic with circular progress ring
+   → "title": string, "number": string (e.g. "503B", "99%"), "unit": string (optional), "description": short string
+
+9. **"quote"** — Full-screen cinematic quote with dark vignette
+   → "quote": string, "author": string, "imagePrompt": descriptive visual prompt
+
+10. **"code"** — macOS-style code editor with syntax highlighting
+    → "title": string, "code": string, "language": string, "explanation": short string (optional)
+
+11. **"icongrid"** — 3-6 items in a grid, each with emoji icon + label + description
+    → "title": string, "items": [{ "icon": emoji string (e.g. "🧠", "⚡", "🔬"), "label": string, "description": short string (optional) }]
+
+12. **"pyramid"** — Stacked hierarchy pyramid (like Maslow's) with 3-5 levels
+    → "title": string, "levels": [{ "label": string, "description": short string (optional) }] (bottom-to-top order, 3-5 levels)
+
+13. **"proscons"** — Two columns with green ✓ / red ✗ badges
+    → "title": string, "pros": string[], "cons": string[] (max 5 each)
+
+14. **"definition"** — Dictionary-style card with term, definition, example
+    → "term": string, "definition": string (1-2 sentences max), "example": string (optional, 1 sentence)
+
+15. **"table"** — Animated data table with header and rows
+    → "title": string, "headers": string[], "rows": string[][] (max 6 columns, max 6 rows)
+
+---
+
+## JSON OUTPUT FORMAT
+
+Return ONLY valid JSON. No markdown, no code blocks, no extra text.
 
 {
-  "presentation_title": "Clean, short title",
-  "theme": "light",
+  "presentation_title": "A compelling, clean title",
+  "theme": "tech",
   "slides": [
     {
       "index": 1,
       "layout": "title",
       "title": "...",
       "subtitle": "...",
-      "voiceover_script": "Welcome to..."
+      "voiceover_script": "..."
     },
     {
       "index": 2,
-      "layout": "flowchart",
+      "layout": "icongrid",
       "title": "...",
-      "steps": [...],
-      "voiceover_script": "First we..."
+      "items": [{"icon": "🧠", "label": "...", "description": "..."}],
+      "voiceover_script": "..."
     }
   ],
   "slideCount": X
 }
 
-**FINAL REMINDER:**
-Target around 6-10 slides. **Maximum 3 minutes speaking time total.** **ZERO WALLS OF TEXT** on the slides; use the visual layouts (flowchart, splitscreen, quote) with highly descriptive \`imagePrompt\`s to pull in beautiful photography while the voiceover carries the explanation! Bullets MUST be under 8 words. Return ONLY valid JSON.
+---
+
+## FINAL CHECKLIST (Verify Before Outputting):
+✅ "theme" field is set to the best matching palette name
+✅ 8-12 slides with strong narrative arc
+✅ Maximum 3 minutes total voiceover (~450 words)
+✅ ZERO text elements longer than 8 words on any slide
+✅ At least 5 DIFFERENT layout types used across the presentation
+✅ No more than 2 consecutive slides with the same layout
+✅ First slide is "title", last slide is "title" or "quote" for strong closure
+✅ Every slide has a "voiceover_script" field
+✅ Output is valid JSON parseable by JSON.parse()
 `;
 
   try {

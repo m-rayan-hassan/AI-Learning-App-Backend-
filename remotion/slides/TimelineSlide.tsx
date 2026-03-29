@@ -1,6 +1,7 @@
 import React from 'react';
 import { useCurrentFrame, interpolate, spring, useVideoConfig } from 'remotion';
 import { theme, SLIDE_WIDTH, SLIDE_HEIGHT } from '../theme';
+import type { ThemeColors } from '../theme';
 import { DynamicBackground } from '../components/DynamicBackground';
 
 interface Event {
@@ -11,16 +12,28 @@ interface Event {
 interface TimelineSlideProps {
   title: string;
   events: Event[];
+  themeColors: ThemeColors;
 }
 
-export const TimelineSlide: React.FC<TimelineSlideProps> = ({ title, events }) => {
+export const TimelineSlide: React.FC<TimelineSlideProps> = ({ title, events, themeColors }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Title
   const titleSpring = spring({ frame, fps, config: { damping: 14, stiffness: 80 } });
   const titleOpacity = interpolate(titleSpring, [0, 1], [0, 1]);
   const titleY = interpolate(titleSpring, [0, 1], [30, 0]);
+
+  // Overflow protection
+  const safeEvents = events.slice(0, 6);
+  const count = safeEvents.length;
+  const cardPadY = count > 4 ? theme.spacing.sm : theme.spacing.md;
+  const cardPadX = count > 4 ? theme.spacing.md : theme.spacing.lg;
+  const eventGap = count > 4 ? theme.spacing.sm : theme.spacing.md;
+  const labelFontSize = count > 4 ? theme.fontSize.body : theme.fontSize.h3;
+  const descFontSize = count > 4 ? theme.fontSize.small - 2 : theme.fontSize.body;
+
+  const cardBg = themeColors.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.75)';
+  const cardBorder = themeColors.isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.9)';
 
   return (
     <div
@@ -36,18 +49,18 @@ export const TimelineSlide: React.FC<TimelineSlideProps> = ({ title, events }) =
         fontFamily: theme.fonts.heading,
       }}
     >
-      <DynamicBackground />
+      <DynamicBackground themeColors={themeColors} />
 
       <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
         <h2
           style={{
-            fontSize: theme.fontSize.hero * 0.75,
+            fontSize: title.length > 40 ? theme.fontSize.h2 : theme.fontSize.hero * 0.75,
             fontWeight: 800,
-            color: theme.colors.textPrimary,
+            color: themeColors.textPrimary,
             opacity: titleOpacity,
             transform: `translateY(${titleY}px)`,
             margin: 0,
-            marginBottom: theme.spacing.lg,
+            marginBottom: theme.spacing.md,
             letterSpacing: -1,
             textAlign: 'center',
           }}
@@ -55,36 +68,34 @@ export const TimelineSlide: React.FC<TimelineSlideProps> = ({ title, events }) =
           {title}
         </h2>
 
-        {/* Vertical Timeline container */}
-        <div 
-          style={{ 
-            flex: 1, 
-            position: 'relative', 
-            display: 'flex', 
-            flexDirection: 'column', 
+        <div
+          style={{
+            flex: 1,
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
             justifyContent: 'center',
             maxWidth: 900,
             margin: '0 auto',
-            width: '100%'
+            width: '100%',
           }}
         >
-          {/* Connecting Vertical Line */}
+          {/* Vertical line */}
           <div
             style={{
               position: 'absolute',
               left: '50%',
-              top: 40,
-              bottom: 40,
+              top: 20,
+              bottom: 20,
               width: 4,
-              background: `linear-gradient(to bottom, ${theme.colors.primary}40, ${theme.colors.secondary}40)`,
+              background: `linear-gradient(to bottom, ${themeColors.primary}40, ${themeColors.secondary}40)`,
               transform: 'translateX(-50%)',
               borderRadius: 2,
             }}
           />
 
-          {events.map((event, i) => {
-            const delay = 15 + i * 15;
-            // Slide inward from left or right depending on even/odd
+          {safeEvents.map((event, i) => {
+            const delay = 15 + i * 12;
             const isLeft = i % 2 === 0;
             const eventSpring = spring({ frame: frame - delay, fps, config: { damping: 14, stiffness: 60 } });
             const eventOpacity = interpolate(eventSpring, [0, 1], [0, 1]);
@@ -96,36 +107,34 @@ export const TimelineSlide: React.FC<TimelineSlideProps> = ({ title, events }) =
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  marginBottom: theme.spacing.md,
+                  marginBottom: eventGap,
                   opacity: eventOpacity,
                   transform: `translateX(${eventX}px)`,
-                  // Force flex-direction row or row-reverse based on side
                   flexDirection: isLeft ? 'row' : 'row-reverse',
                   width: '100%',
                 }}
               >
-                {/* Content Card (Takes up slightly less than half) */}
                 <div
                   style={{
                     width: 'calc(50% - 40px)',
-                    background: 'rgba(255,255,255,0.75)',
+                    background: cardBg,
                     backdropFilter: 'blur(8px)',
                     WebkitBackdropFilter: 'blur(8px)',
-                    padding: `${theme.spacing.md}px ${theme.spacing.lg}px`,
+                    padding: `${cardPadY}px ${cardPadX}px`,
                     borderRadius: theme.borderRadius.xl,
                     boxShadow: theme.shadow.card,
-                    border: '1px solid rgba(255,255,255,0.9)',
+                    border: cardBorder,
                     textAlign: isLeft ? 'right' : 'left',
                   }}
                 >
                   <h3
                     style={{
-                      fontSize: theme.fontSize.h3,
+                      fontSize: labelFontSize,
                       fontWeight: 800,
-                      color: theme.colors.primary,
+                      color: themeColors.primary,
                       margin: 0,
-                      marginBottom: theme.spacing.xs,
-                      letterSpacing: -1,
+                      marginBottom: event.description ? theme.spacing.xs : 0,
+                      letterSpacing: -0.5,
                     }}
                   >
                     {event.label}
@@ -133,10 +142,10 @@ export const TimelineSlide: React.FC<TimelineSlideProps> = ({ title, events }) =
                   {event.description && (
                     <p
                       style={{
-                        fontSize: theme.fontSize.body,
-                        color: theme.colors.textSecondary,
+                        fontSize: descFontSize,
+                        color: themeColors.textSecondary,
                         margin: 0,
-                        lineHeight: 1.5,
+                        lineHeight: 1.4,
                         fontFamily: theme.fonts.body,
                       }}
                     >
@@ -145,7 +154,7 @@ export const TimelineSlide: React.FC<TimelineSlideProps> = ({ title, events }) =
                   )}
                 </div>
 
-                {/* Center Node (Always directly on the center line) */}
+                {/* Center node */}
                 <div
                   style={{
                     width: 80,
@@ -160,15 +169,14 @@ export const TimelineSlide: React.FC<TimelineSlideProps> = ({ title, events }) =
                       width: 24,
                       height: 24,
                       borderRadius: '50%',
-                      background: theme.colors.bgCard,
-                      border: `4px solid ${theme.colors.primary}`,
-                      boxShadow: `0 0 15px ${theme.colors.primary}50`,
-                      zIndex: 2, // above the line
+                      background: themeColors.isDark ? themeColors.bg : themeColors.bgCard,
+                      border: `4px solid ${themeColors.primary}`,
+                      boxShadow: `0 0 15px ${themeColors.primary}50`,
+                      zIndex: 2,
                     }}
                   />
                 </div>
-                
-                {/* Empty space filler for the other side */}
+
                 <div style={{ width: 'calc(50% - 40px)' }} />
               </div>
             );

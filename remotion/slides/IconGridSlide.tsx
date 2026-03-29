@@ -4,13 +4,19 @@ import { theme, SLIDE_WIDTH, SLIDE_HEIGHT } from '../theme';
 import type { ThemeColors } from '../theme';
 import { DynamicBackground } from '../components/DynamicBackground';
 
-interface BulletPointSlideProps {
+interface IconGridItem {
+  icon: string;
+  label: string;
+  description?: string;
+}
+
+interface IconGridSlideProps {
   title: string;
-  bullets: string[];
+  items: IconGridItem[];
   themeColors: ThemeColors;
 }
 
-export const BulletPointSlide: React.FC<BulletPointSlideProps> = ({ title, bullets, themeColors }) => {
+export const IconGridSlide: React.FC<IconGridSlideProps> = ({ title, items, themeColors }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -18,17 +24,12 @@ export const BulletPointSlide: React.FC<BulletPointSlideProps> = ({ title, bulle
   const titleOpacity = interpolate(titleSpring, [0, 1], [0, 1]);
   const titleY = interpolate(titleSpring, [0, 1], [40, 0]);
 
-  // Adaptive layout
-  const safeBullets = bullets.slice(0, 8);
-  const count = safeBullets.length;
-  const columns = count <= 4 ? 2 : 3;
-  const cardPadding = count > 6 ? theme.spacing.sm : theme.spacing.md;
-  const fontSize = count > 6 ? theme.fontSize.small : theme.fontSize.body;
-  const iconSize = count > 6 ? 32 : 40;
+  const safeItems = items.slice(0, 6);
+  const count = safeItems.length;
+  const columns = count <= 3 ? count : count <= 4 ? 2 : 3;
 
   const cardBg = themeColors.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.7)';
   const cardBorder = themeColors.isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.9)';
-
   const accentColors = [themeColors.primary, themeColors.secondary, themeColors.accent, themeColors.primaryLight, themeColors.secondaryLight, themeColors.accentLight];
 
   return (
@@ -40,7 +41,7 @@ export const BulletPointSlide: React.FC<BulletPointSlideProps> = ({ title, bulle
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
-        padding: `${theme.spacing.md}px ${theme.spacing.xl}px`,
+        padding: `${theme.spacing.lg}px ${theme.spacing.xl}px`,
         position: 'relative',
         overflow: 'hidden',
         fontFamily: theme.fonts.heading,
@@ -59,7 +60,7 @@ export const BulletPointSlide: React.FC<BulletPointSlideProps> = ({ title, bulle
             lineHeight: 1.15,
             letterSpacing: -1,
             margin: 0,
-            marginBottom: theme.spacing.md,
+            marginBottom: theme.spacing.lg,
             textAlign: 'center',
           }}
         >
@@ -70,18 +71,16 @@ export const BulletPointSlide: React.FC<BulletPointSlideProps> = ({ title, bulle
           style={{
             display: 'grid',
             gridTemplateColumns: `repeat(${columns}, 1fr)`,
-            gap: theme.spacing.sm,
+            gap: theme.spacing.md,
             flex: 1,
-            alignItems: 'center',
             alignContent: 'center',
           }}
         >
-          {safeBullets.map((bullet, i) => {
-            const delay = 18 + i * 8;
+          {safeItems.map((item, i) => {
+            const delay = 15 + i * 10;
             const cardSpring = spring({ frame: frame - delay, fps, config: { damping: 12, stiffness: 70 } });
             const cardOpacity = interpolate(cardSpring, [0, 1], [0, 1]);
-            const cardScale = interpolate(cardSpring, [0, 1], [0.8, 1]);
-
+            const cardScale = interpolate(cardSpring, [0, 1], [0.85, 1]);
             const activeColor = accentColors[i % accentColors.length];
 
             return (
@@ -93,54 +92,60 @@ export const BulletPointSlide: React.FC<BulletPointSlideProps> = ({ title, bulle
                   background: cardBg,
                   backdropFilter: 'blur(8px)',
                   WebkitBackdropFilter: 'blur(8px)',
-                  padding: cardPadding,
+                  padding: theme.spacing.md,
                   borderRadius: theme.borderRadius.xl,
                   border: cardBorder,
                   boxShadow: theme.shadow.card,
                   display: 'flex',
-                  flexDirection: 'row',
+                  flexDirection: 'column',
                   alignItems: 'center',
+                  textAlign: 'center',
                   gap: theme.spacing.sm,
                 }}
               >
-                {/* Numbered badge */}
+                {/* Emoji icon in colored circle */}
                 <div
                   style={{
-                    width: iconSize,
-                    height: iconSize,
-                    borderRadius: theme.borderRadius.lg,
+                    width: 56,
+                    height: 56,
+                    borderRadius: '50%',
                     background: `${activeColor}15`,
+                    border: `2px solid ${activeColor}30`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    border: `1px solid ${activeColor}30`,
-                    flexShrink: 0,
+                    fontSize: 28,
                   }}
                 >
-                  <span
-                    style={{
-                      fontSize: iconSize * 0.45,
-                      fontWeight: 800,
-                      color: activeColor,
-                    }}
-                  >
-                    {i + 1}
-                  </span>
+                  {item.icon}
                 </div>
 
-                <p
+                <h3
                   style={{
-                    flex: 1,
-                    fontSize,
+                    fontSize: theme.fontSize.body,
+                    fontWeight: 800,
                     color: themeColors.textPrimary,
                     margin: 0,
-                    lineHeight: 1.35,
-                    fontWeight: 600,
-                    fontFamily: theme.fonts.body,
+                    letterSpacing: -0.5,
                   }}
                 >
-                  {bullet}
-                </p>
+                  {item.label}
+                </h3>
+
+                {item.description && (
+                  <p
+                    style={{
+                      fontSize: theme.fontSize.small - 2,
+                      color: themeColors.textSecondary,
+                      margin: 0,
+                      lineHeight: 1.4,
+                      fontFamily: theme.fonts.body,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {item.description}
+                  </p>
+                )}
               </div>
             );
           })}

@@ -4,7 +4,7 @@ import { Composition } from 'remotion';
 import { VideoComposition } from './VideoComposition';
 import { SLIDE_WIDTH, SLIDE_HEIGHT, FPS } from './theme';
 
-// Load Premium Typography for the Web Explainer Aesthetic
+// Load Premium Typography
 import { loadFont as loadJakarta } from '@remotion/google-fonts/PlusJakartaSans';
 import { loadFont as loadInter } from '@remotion/google-fonts/Inter';
 
@@ -37,6 +37,7 @@ const RemotionRoot: React.FC = () => {
         defaultProps={{
           slides: [],
           audioDurations: [],
+          theme: 'default',
         }}
       />
     </>

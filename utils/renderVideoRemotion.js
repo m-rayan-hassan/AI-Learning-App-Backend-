@@ -54,10 +54,11 @@ const getBundle = async () => {
  * @param {Array} slides       - Array of slide objects from LLM (layout, title, bullets, etc.)
  * @param {Array} audioDurations - Array of { index, duration, filePath } from ElevenLabs
  * @param {string} docId       - Document ID for unique file paths
+ * @param {string} themeName   - Theme palette name (e.g. 'tech', 'science', 'default')
  * @returns {string}           - Path to the rendered silent MP4 file
  */
-export const renderVideoRemotion = async (slides, audioDurations, docId) => {
-  console.log(`🎬 Remotion: Starting render for ${slides.length} slides (doc: ${docId})`);
+export const renderVideoRemotion = async (slides, audioDurations, docId, themeName = 'default') => {
+  console.log(`🎬 Remotion: Starting render for ${slides.length} slides (doc: ${docId}, theme: ${themeName})`);
 
   // 1. Get (or create) the bundle
   const bundleLocation = await getBundle();
@@ -78,6 +79,7 @@ export const renderVideoRemotion = async (slides, audioDurations, docId) => {
       index: ad.index,
       duration: ad.duration,
     })),
+    theme: themeName,
   };
 
   const composition = await selectComposition({

@@ -1,34 +1,43 @@
 import React from 'react';
 import { useCurrentFrame, interpolate, spring, useVideoConfig } from 'remotion';
 import { theme, SLIDE_WIDTH, SLIDE_HEIGHT } from '../theme';
+import type { ThemeColors } from '../theme';
 import { DynamicBackground } from '../components/DynamicBackground';
 
 interface TitleSlideProps {
   title: string;
   subtitle?: string;
+  themeColors: ThemeColors;
 }
 
-export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle }) => {
+export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle, themeColors }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Glass card entrance animation
   const cardSpring = spring({ frame, fps, config: { damping: 14, stiffness: 70 } });
   const cardScale = interpolate(cardSpring, [0, 1], [0.8, 1]);
   const cardOpacity = interpolate(cardSpring, [0, 1], [0, 1]);
 
-  // Title reveals slightly after card
   const titleSpring = spring({ frame: frame - 10, fps, config: { damping: 14, stiffness: 80 } });
   const titleY = interpolate(titleSpring, [0, 1], [40, 0]);
   const titleOpacity = interpolate(titleSpring, [0, 1], [0, 1]);
 
-  // Subtitle reveals last
   const subtitleSpring = spring({ frame: frame - 20, fps, config: { damping: 14, stiffness: 80 } });
   const subtitleY = interpolate(subtitleSpring, [0, 1], [30, 0]);
   const subtitleOpacity = interpolate(subtitleSpring, [0, 1], [0, 1]);
 
-  // Subtle floating motion for the glass card
-  const floatY = Math.sin(frame / 30) * 10;
+  const floatY = Math.sin(frame / 30) * 8;
+
+  // Auto-scale title font
+  const titleLen = title.length;
+  const titleFontSize = titleLen > 60 ? theme.fontSize.h1 : titleLen > 35 ? theme.fontSize.hero : theme.fontSize.hero * 1.1;
+
+  const cardBg = themeColors.isDark
+    ? 'rgba(255,255,255,0.06)'
+    : 'rgba(255,255,255,0.65)';
+  const cardBorder = themeColors.isDark
+    ? '1px solid rgba(255,255,255,0.12)'
+    : '1px solid rgba(255,255,255,0.8)';
 
   return (
     <div
@@ -45,17 +54,16 @@ export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle }) => {
         fontFamily: theme.fonts.heading,
       }}
     >
-      <DynamicBackground />
+      <DynamicBackground themeColors={themeColors} />
 
-      {/* Glassmorphism Presentation Card */}
-      <div 
+      <div
         style={{
           position: 'relative',
           zIndex: 10,
-          background: 'rgba(255, 255, 255, 0.65)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          border: '1px solid rgba(255, 255, 255, 0.8)',
+          background: cardBg,
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          border: cardBorder,
           borderRadius: theme.borderRadius.xl,
           padding: `${theme.spacing.xxl}px ${theme.spacing.xl}px`,
           width: '85%',
@@ -69,11 +77,11 @@ export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle }) => {
           alignItems: 'center',
         }}
       >
-        <div 
+        <div
           style={{
             width: 60,
             height: 4,
-            background: theme.colors.gradientPrimary,
+            background: themeColors.gradientPrimary,
             borderRadius: theme.borderRadius.pill,
             marginBottom: theme.spacing.lg,
           }}
@@ -81,9 +89,9 @@ export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle }) => {
 
         <h1
           style={{
-            fontSize: theme.fontSize.hero * 1.1,
+            fontSize: titleFontSize,
             fontWeight: 800,
-            color: theme.colors.textPrimary,
+            color: themeColors.textPrimary,
             opacity: titleOpacity,
             transform: `translateY(${titleY}px)`,
             lineHeight: 1.1,
@@ -100,7 +108,7 @@ export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle }) => {
             style={{
               fontSize: theme.fontSize.h3,
               fontWeight: 500,
-              color: theme.colors.textSecondary,
+              color: themeColors.textSecondary,
               opacity: subtitleOpacity,
               transform: `translateY(${subtitleY}px)`,
               margin: 0,

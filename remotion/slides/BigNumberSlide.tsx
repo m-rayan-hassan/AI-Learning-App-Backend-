@@ -1,6 +1,7 @@
 import React from 'react';
 import { useCurrentFrame, interpolate, spring, useVideoConfig } from 'remotion';
 import { theme, SLIDE_WIDTH, SLIDE_HEIGHT } from '../theme';
+import type { ThemeColors } from '../theme';
 import { DynamicBackground } from '../components/DynamicBackground';
 
 interface BigNumberSlideProps {
@@ -8,30 +9,35 @@ interface BigNumberSlideProps {
   number: string;
   unit?: string;
   description?: string;
+  themeColors: ThemeColors;
 }
 
-export const BigNumberSlide: React.FC<BigNumberSlideProps> = ({ title, number, unit, description }) => {
+export const BigNumberSlide: React.FC<BigNumberSlideProps> = ({ title, number, unit, description, themeColors }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Title
   const titleSpring = spring({ frame, fps, config: { damping: 14, stiffness: 80 } });
   const titleOpacity = interpolate(titleSpring, [0, 1], [0, 1]);
   const titleY = interpolate(titleSpring, [0, 1], [30, 0]);
 
-  // Big number — dramatic scale-in
   const numSpring = spring({ frame: frame - 10, fps, config: { damping: 10, stiffness: 50, mass: 1.2 } });
   const numScale = interpolate(numSpring, [0, 1], [0.5, 1]);
   const numOpacity = interpolate(numSpring, [0, 1], [0, 1]);
 
-  // Description
   const descSpring = spring({ frame: frame - 25, fps, config: { damping: 14, stiffness: 80 } });
   const descOpacity = interpolate(descSpring, [0, 1], [0, 1]);
   const descY = interpolate(descSpring, [0, 1], [20, 0]);
 
-  // Animated SVG Ring behind number
   const ringProgress = interpolate(frame, [15, 60], [0, Math.PI * 2 * 0.75], { extrapolateRight: 'clamp' });
-  const ringRadius = 240;
+  const ringRadius = 220;
+
+  // Auto-scale number font based on character count
+  const numLen = number.length;
+  const numFontSize = numLen > 10 ? 80 : numLen > 7 ? 100 : numLen > 4 ? 130 : 160;
+
+  const circleBg = themeColors.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.5)';
+  const circleBorder = themeColors.isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(255,255,255,0.7)';
+  const descBg = themeColors.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.8)';
 
   return (
     <div
@@ -48,27 +54,25 @@ export const BigNumberSlide: React.FC<BigNumberSlideProps> = ({ title, number, u
         fontFamily: theme.fonts.heading,
       }}
     >
-      <DynamicBackground />
+      <DynamicBackground themeColors={themeColors} />
 
-      {/* SVG Animated Arc */}
+      {/* Animated ring */}
       <svg
-        width={600}
-        height={600}
-        style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1 }}
+        width={560}
+        height={560}
+        style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -55%)', zIndex: 1 }}
       >
-        {/* Background Track */}
-        <circle 
-          cx={300} cy={300} r={ringRadius} 
-          fill="none" 
-          stroke="rgba(0,0,0,0.04)" 
-          strokeWidth="30" 
+        <circle
+          cx={280} cy={280} r={ringRadius}
+          fill="none"
+          stroke={themeColors.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'}
+          strokeWidth="28"
         />
-        {/* Progress Arc */}
-        <circle 
-          cx={300} cy={300} r={ringRadius} 
-          fill="none" 
-          stroke={theme.colors.primary} 
-          strokeWidth="30" 
+        <circle
+          cx={280} cy={280} r={ringRadius}
+          fill="none"
+          stroke={themeColors.primary}
+          strokeWidth="28"
           strokeLinecap="round"
           strokeDasharray={Math.PI * 2 * ringRadius}
           strokeDashoffset={Math.PI * 2 * ringRadius - ringProgress * ringRadius}
@@ -76,33 +80,32 @@ export const BigNumberSlide: React.FC<BigNumberSlideProps> = ({ title, number, u
         />
       </svg>
 
-      <div 
-        style={{ 
-          position: 'relative', 
-          zIndex: 10, 
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 10,
           textAlign: 'center',
-          background: 'rgba(255, 255, 255, 0.5)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          background: circleBg,
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
           borderRadius: '50%',
-          width: 440,
-          height: 440,
+          width: 400,
+          height: 400,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           boxShadow: theme.shadow.elevated,
-          border: '1px solid rgba(255,255,255,0.7)',
+          border: circleBorder,
           opacity: numOpacity,
           transform: `scale(${numScale})`,
         }}
       >
-        {/* Title inside circle */}
         <h3
           style={{
             fontSize: theme.fontSize.h3,
             fontWeight: 500,
-            color: theme.colors.textSecondary,
+            color: themeColors.textSecondary,
             opacity: titleOpacity,
             transform: `translateY(${titleY}px)`,
             margin: 0,
@@ -114,13 +117,12 @@ export const BigNumberSlide: React.FC<BigNumberSlideProps> = ({ title, number, u
           {title}
         </h3>
 
-        {/* Big Number */}
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center' }}>
           <span
             style={{
-              fontSize: 160,
+              fontSize: numFontSize,
               fontWeight: 900,
-              color: theme.colors.textPrimary,
+              color: themeColors.textPrimary,
               lineHeight: 1,
               letterSpacing: -5,
             }}
@@ -132,7 +134,7 @@ export const BigNumberSlide: React.FC<BigNumberSlideProps> = ({ title, number, u
               style={{
                 fontSize: theme.fontSize.h1,
                 fontWeight: 600,
-                color: theme.colors.primary,
+                color: themeColors.primary,
                 marginLeft: theme.spacing.xs,
               }}
             >
@@ -142,14 +144,13 @@ export const BigNumberSlide: React.FC<BigNumberSlideProps> = ({ title, number, u
         </div>
       </div>
 
-      {/* Description below */}
       {description && (
         <p
           style={{
             position: 'relative',
             zIndex: 10,
             fontSize: theme.fontSize.h3,
-            color: theme.colors.textSecondary,
+            color: themeColors.textSecondary,
             opacity: descOpacity,
             transform: `translateY(${descY}px)`,
             margin: 0,
@@ -157,11 +158,11 @@ export const BigNumberSlide: React.FC<BigNumberSlideProps> = ({ title, number, u
             maxWidth: 700,
             lineHeight: 1.5,
             textAlign: 'center',
-            background: 'rgba(255,255,255,0.8)',
+            background: descBg,
             backdropFilter: 'blur(8px)',
             padding: theme.spacing.md,
             borderRadius: theme.borderRadius.lg,
-            border: '1px solid rgba(255,255,255,0.7)',
+            border: circleBorder,
             fontFamily: theme.fonts.body,
           }}
         >
