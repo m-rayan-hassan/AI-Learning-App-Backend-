@@ -21,6 +21,7 @@ dotenv.config();
 await connectDB();
 
 const app = express();
+app.set("trust proxy", 1); // Trust first proxy (necessary for secure cookies on Railway/Vercel)
 const PORT = process.env.PORT || 3000;
 
 // CORS - URL whitelist including frontend URLs and Google login
