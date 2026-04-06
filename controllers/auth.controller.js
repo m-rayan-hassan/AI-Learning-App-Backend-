@@ -14,8 +14,8 @@ const REFRESH_COOKIE_NAME = "refreshToken";
 
 const getRefreshCookieOptions = () => ({
   httpOnly: true, // Not accessible via JavaScript (XSS protection)
-  secure: process.env.NODE_ENV === "production", // HTTPS only in production
-  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  secure: true, // HTTPS required for cross-site cookies
+  sameSite: "none", // Must be "none" for cross-origin deployments (e.g. Vercel -> Railway)
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
   path: "/", // Available on all routes
 });
@@ -241,8 +241,8 @@ export const refreshAccessToken = async (req, res) => {
     // Clear invalid cookie
     res.clearCookie(REFRESH_COOKIE_NAME, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: true,
+      sameSite: "none",
       path: "/",
     });
     return res.status(401).json({ message: "Invalid refresh token" });
@@ -255,8 +255,8 @@ export const refreshAccessToken = async (req, res) => {
 export const logoutUser = async (req, res) => {
   res.clearCookie(REFRESH_COOKIE_NAME, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    secure: true,
+    sameSite: "none",
     path: "/",
   });
 
@@ -343,8 +343,8 @@ export const deleteUser = async (req, res) => {
       // Clear refresh cookie on account deletion
       res.clearCookie(REFRESH_COOKIE_NAME, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        secure: true,
+        sameSite: "none",
         path: "/",
       });
 
