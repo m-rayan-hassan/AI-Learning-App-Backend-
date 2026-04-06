@@ -1,12 +1,44 @@
 import User from "../models/User.model.js";
-import generateToken from "../utils/generateToken.js";
+import { generateAccessToken, generateRefreshToken } from "../utils/generateToken.js";
 import sendEmail from "../utils/sendEmail.js";
 import bcrypt from "bcryptjs";
 import Joi from "joi";
 import { OAuth2Client } from "google-auth-library";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// ─── Cookie Configuration ───────────────────────────────────────────
+const REFRESH_COOKIE_NAME = "refreshToken";
+
+const getRefreshCookieOptions = () => ({
+  httpOnly: true, // Not accessible via JavaScript (XSS protection)
+  secure: process.env.NODE_ENV === "production", // HTTPS only in production
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+  path: "/", // Available on all routes
+});
+
+/**
+ * Helper: Set tokens and send response.
+ * - accessToken → JSON body (stored in-memory on client)
+ * - refreshToken → HttpOnly cookie (auto-sent by browser)
+ */
+const sendTokenResponse = (res, user, statusCode = 200) => {
+  const accessToken = generateAccessToken(user._id);
+  const refreshToken = generateRefreshToken(user._id);
+
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, getRefreshCookieOptions());
+
+  res.status(statusCode).json({
+    _id: user._id,
+    username: user.username,
+    email: user.email,
+    profileImage: user.profileImage,
+    accessToken,
+  });
+};
 
 // Validation Schemas
 const registerSchema = Joi.object({
@@ -41,13 +73,7 @@ export const registerUser = async (req, res) => {
       password: hashedPassword,
     });
 
-    res.status(201).json({
-      _id: user._id,
-      username: user.username,
-      email: user.email,
-      profileImage: user.profileImage,
-      token: generateToken(user._id),
-    });
+    sendTokenResponse(res, user, 201);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -115,13 +141,7 @@ export const loginUser = async (req, res) => {
   try {
     const user = await User.findOne({ email });
     if (user && (await bcrypt.compare(password, user.password))) {
-      res.json({
-        _id: user._id,
-        username: user.username,
-        email: user.email,
-        profileImage: user.profileImage,
-        token: generateToken(user._id),
-      });
+      sendTokenResponse(res, user);
     } else {
       res.status(401).json({ message: "Invalid email or password" });
     }
@@ -174,7 +194,6 @@ export const googleLogin = async (req, res) => {
       }
     } else {
       // Create new user via Google
-      // Note: Password is set to a dummy secret or handled by schema validation skipping
       user = await User.create({
         username: name,
         email,
@@ -184,19 +203,64 @@ export const googleLogin = async (req, res) => {
       });
     }
 
-    res.json({
-      _id: user._id,
-      username: user.username,
-      email: user.email,
-      profileImage: user.profileImage,
-      token: generateToken(user._id),
-    });
+    sendTokenResponse(res, user);
   } catch (err) {
     console.error("Google login error:", err.message);
     res
       .status(500)
       .json({ message: "Google authentication failed", error: err.message });
   }
+};
+
+// @desc    Refresh Access Token
+// @route   POST /api/auth/refresh
+// @access  Public (uses HttpOnly cookie)
+export const refreshAccessToken = async (req, res) => {
+  const token = req.cookies[REFRESH_COOKIE_NAME];
+
+  if (!token) {
+    return res.status(401).json({ message: "No refresh token" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    const user = await User.findById(decoded.id).select("-password");
+
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    // Token rotation: issue new pair for security
+    const newAccessToken = generateAccessToken(user._id);
+    const newRefreshToken = generateRefreshToken(user._id);
+
+    res.cookie(REFRESH_COOKIE_NAME, newRefreshToken, getRefreshCookieOptions());
+
+    res.json({ accessToken: newAccessToken });
+  } catch (err) {
+    // Clear invalid cookie
+    res.clearCookie(REFRESH_COOKIE_NAME, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      path: "/",
+    });
+    return res.status(401).json({ message: "Invalid refresh token" });
+  }
+};
+
+// @desc    Logout user (clear refresh cookie)
+// @route   POST /api/auth/logout
+// @access  Public
+export const logoutUser = async (req, res) => {
+  res.clearCookie(REFRESH_COOKIE_NAME, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    path: "/",
+  });
+
+  res.status(200).json({ message: "Logged out successfully" });
 };
 
 // @desc    Forgot Password
@@ -275,6 +339,15 @@ export const deleteUser = async (req, res) => {
 
     if (user) {
       await User.deleteOne({ _id: user._id });
+
+      // Clear refresh cookie on account deletion
+      res.clearCookie(REFRESH_COOKIE_NAME, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        path: "/",
+      });
+
       res.json({ message: "User removed" });
     } else {
       res.status(404).json({ message: "User not found" });
