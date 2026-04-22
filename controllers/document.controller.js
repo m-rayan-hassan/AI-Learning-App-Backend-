@@ -16,6 +16,9 @@ import VoiceOverview from "../models/VoiceOverview.model.js";
 import VideoOverview from "../models/VideoOverview.model.js";
 import User from "../models/User.model.js";
 import { userPlans } from "../utils/planFeaturesAndLimit.js";
+import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
+import { textSplitter, embeddings } from "../utils/aiFunctionalities.js";
+
 
 // Upload Document Controller
 export const uploadDocument = async (req, res) => {
@@ -169,6 +172,24 @@ export const uploadDocument = async (req, res) => {
           extractedText: getExtractedContent,
           status: "ready",
         });
+
+        
+        const docIdString = String(newDocument._id);
+
+        const docsToSave = await textSplitter.createDocuments(
+            [getExtractedContent],
+            [{ documentId: docIdString }] 
+        );
+
+        const chunkCollection = mongoose.connection.db.collection("document_chunks");
+
+        await MongoDBAtlasVectorSearch.fromDocuments(docsToSave, embeddings, {
+            collection: chunkCollection,
+            indexName: "vector_index", // Must match the name in MongoDB Atlas UI
+            textKey: "text",
+            embeddingKey: "embedding",
+        });
+        
         console.log(
           `Document ${newDocument._id} successfully updated to 'ready' status.`,
         );

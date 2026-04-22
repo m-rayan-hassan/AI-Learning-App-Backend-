@@ -1,9 +1,23 @@
 import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import { TaskType } from "@google/generative-ai";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+export const embeddings = new GoogleGenerativeAIEmbeddings({
+    apiKey: process.env.GEMINI_API_KEY,
+    model: "gemini-embedding-001",       
+    taskType: TaskType.RETRIEVAL_DOCUMENT,
+});
+
+export const textSplitter = new RecursiveCharacterTextSplitter({
+    chunkSize: 1000,   // Max characters per chunk
+    chunkOverlap: 200, // Overlap to prevent cutting sentences in half
+});
 
 export const getExtractedContent = async (url) => {
   const prompt = `**System Role:** You are an Elite Content Reconstruction AI and Instructional Designer with forensic-level attention to detail. Your singular mission is to perform a COMPLETE, LOSSLESS transcription of the entire document into a semantic, machine-readable format that preserves 100% of the educational value for downstream processing (quizzes, flashcards, voice scripts, video generation, and AI tutoring).
@@ -348,9 +362,11 @@ ${content}`;
 
 export const chatWithContext = async (
   question,
-  content,
+  retrievedContext,
   chatHistoryMessages,
 ) => {
+
+
   const prompt = `**System Role:** You are an Elite Socratic AI Tutor — the best AI learning companion available. You combine the patience of a great teacher, the precision of a subject matter expert, and the engaging style of a top educator. Students prefer you over every other AI learning tool because your explanations are clearer, more visual, and more insightful.
 
 **Core Instructions (Non-Negotiable):**
@@ -374,7 +390,7 @@ export const chatWithContext = async (
 7. **Chat Continuity:** Use the "Previous Chat" history to maintain conversational context. Reference prior exchanges when relevant. Avoid repeating information already covered unless the user asks for clarification.
 
 **Context:**
-${content}
+${retrievedContext}
 
 **Previous Chat:**
 ${chatHistoryMessages}

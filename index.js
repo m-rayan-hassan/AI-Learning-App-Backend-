@@ -15,6 +15,7 @@ import quizRoutes from "./routes/quiz.routes.js";
 import progressRoutes from "./routes/progress.routes.js";
 import { paymentWebhook } from "./controllers/payment.controller.js";
 import paymentRouter from "./routes/payment.routes.js";
+import { embeddings } from "./utils/aiFunctionalities.js";
 // Load environment variables
 dotenv.config();
 
@@ -69,6 +70,7 @@ app.use(
   }),
 );
 
+
 // Global rate limiting - more generous in development for hot reload & rapid navigation
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -112,6 +114,11 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/quizzes", quizRoutes);
 app.use("/api/progress", progressRoutes);
 app.use("/api/payments", paymentRouter);
+
+
+const testEmbed = await embeddings.embedQuery("test");
+console.log("Embedding dimensions:", testEmbed.length);
+
 
 // 404 Handler
 app.use((req, res) => {

@@ -10,6 +10,7 @@ import * as voiceFunctionalities from "../utils/voiceFunctionalities.js";
 import { uploadMedia } from "../config/cloudinary.js";
 import fs from "fs/promises";
 import path from "path";
+import mongoose from "mongoose";
 import {
   constructGammaPrompt,
   startGammaGeneration,
@@ -20,6 +21,9 @@ import { stitchAudioAndVideo } from "../utils/stitcher.js";
 import { userPlans } from "../utils/planFeaturesAndLimit.js";
 import { renderVideoRemotion } from "../utils/renderVideoRemotion.js";
 import { getTestSlideData, getTestAudioDurations } from "../utils/aiFunctionalitiesRemotion.js";
+import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
+import { embeddings } from "../utils/aiFunctionalities.js";
+
 
 export const generateFlashcards = async (req, res, next) => {
   try {
@@ -292,10 +296,32 @@ export const chat = async (req, res, next) => {
       });
     }
 
+    const chunkCollection = mongoose.connection.db.collection("document_chunks");
+    
+    const vectorStore = new MongoDBAtlasVectorSearch(embeddings, {
+        collection: chunkCollection,
+        indexName: "vector_index",
+        textKey: "text",
+        embeddingKey: "embedding",
+    });
+
+    const searchResults = await vectorStore.similaritySearch(question, 3, {
+        preFilter: { documentId: { $eq: documentId } } // MongoDB query syntax to filter by doc ID
+    });
+
     const content = document.extractedText;
+
+    let retrievedContext;
+
+    if (searchResults.length === 0) {
+        retrievedContext = content;
+    } else {
+      retrievedContext = searchResults.map(doc => doc.pageContent).join("\n\n---\n\n");
+    }
+    
     const answer = await aiFunctionalities.chatWithContext(
       question,
-      content,
+      retrievedContext,
       chatHistory.messages,
     );
 
