@@ -18,7 +18,7 @@ import User from "../models/User.model.js";
 import { userPlans } from "../utils/planFeaturesAndLimit.js";
 import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
 import { textSplitter, embeddings } from "../utils/aiFunctionalities.js";
-
+import { client } from "../config/llamaConfig.js";
 
 // Upload Document Controller
 export const uploadDocument = async (req, res) => {
@@ -56,7 +56,10 @@ export const uploadDocument = async (req, res) => {
     console.log("user document count: ", userDocumentCount);
     console.log("userPlan: ", userPlan);
 
-    if (userDocumentCount >= userPlans[userPlan].docs && new Date() < user.quotas.document.resetDate) {
+    if (
+      userDocumentCount >= userPlans[userPlan].docs &&
+      new Date() < user.quotas.document.resetDate
+    ) {
       return res.status(400).json({
         success: false,
         message: "Document uplaod limit reatched. Upgrade to upload",
@@ -119,13 +122,13 @@ export const uploadDocument = async (req, res) => {
     console.log("PDF URL: ", pdfUrl);
 
     // cleanup local files
-    try {
-      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      if (isConverted && pdfPath && fs.existsSync(pdfPath))
-        fs.unlinkSync(pdfPath);
-    } catch (cleanupError) {
-      console.error("Cleanup error:", cleanupError);
-    }
+    // try {
+    //   if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    //   if (isConverted && pdfPath && fs.existsSync(pdfPath))
+    //     fs.unlinkSync(pdfPath);
+    // } catch (cleanupError) {
+    //   console.error("Cleanup error:", cleanupError);
+    // }
 
     // Save to Database initially as processing
     const newDocument = new Document({
@@ -160,42 +163,72 @@ export const uploadDocument = async (req, res) => {
     (async () => {
       try {
         console.log(
+          `2. Document uploaded (ID: ${newDocument._id}). Starting Agentic Parsing...`,
+        );
+
+        const file = await client.files.create({
+          file: fs.createReadStream(req.file.path),
+          purpose: "parse", // Specifies we want to parse it, not just store it
+        });
+
+        const result = await client.parsing.parse({
+          file_id: file.id,
+          tier: "agentic", // 'agentic' is their newest premium mode (perfect for math/images)
+          version: "latest",
+          expand: ["markdown"], // Tells it to return the markdown layout
+        });
+
+        console.log("3. Parsing complete! Combining pages...");
+
+        console.log(
           `Starting background Gemini extraction for document ${newDocument._id}...`,
         );
-        const getExtractedContent =
-          await aiFunctionalities.getExtractedContent(pdfUrl);
+
+        // const getExtractedContent =
+        //   await aiFunctionalities.getExtractedContent(pdfUrl);
+        // console.log(
+        //   `Gemini extraction complete for document ${newDocument._id}.`,
+        // );
+
+        if (!result.markdown || !result.markdown.pages) {
+          throw new Error("No markdown returned from LlamaCloud");
+        }
+
+        const fullMarkdown = result.markdown.pages
+          .map((page) => page.markdown)
+          .join("\n\n---\n\n"); // Adds a visual break between pages, good for AI context
+
         console.log(
-          `Gemini extraction complete for document ${newDocument._id}.`,
+          "4. Document Parsed Successfully. Math and Layout Preserved.",
         );
 
         await Document.findByIdAndUpdate(newDocument._id, {
-          extractedText: getExtractedContent,
+          extractedText: fullMarkdown,
           status: "ready",
         });
 
-        
         const docIdString = String(newDocument._id);
 
         const docsToSave = await textSplitter.createDocuments(
-            [getExtractedContent],
-            [{ documentId: docIdString }] 
+          [fullMarkdown],
+          [{ documentId: docIdString }],
         );
 
-        const chunkCollection = mongoose.connection.db.collection("document_chunks");
+        const chunkCollection =
+          mongoose.connection.db.collection("document_chunks");
 
         await MongoDBAtlasVectorSearch.fromDocuments(docsToSave, embeddings, {
-            collection: chunkCollection,
-            indexName: "vector_index", // Must match the name in MongoDB Atlas UI
-            textKey: "text",
-            embeddingKey: "embedding",
+          collection: chunkCollection,
+          indexName: "vector_index", // Must match the name in MongoDB Atlas UI
+          textKey: "text",
+          embeddingKey: "embedding",
         });
-        
+
         console.log(
           `Document ${newDocument._id} successfully updated to 'ready' status.`,
         );
         await user.incrementQuota("document");
         console.log("user document count: ", user.quotas.document.count);
-        
       } catch (extractionError) {
         console.error(
           `Background extraction error for document ${newDocument._id}:`,
@@ -204,6 +237,14 @@ export const uploadDocument = async (req, res) => {
         await Document.findByIdAndUpdate(newDocument._id, {
           status: "failed",
         });
+      } finally {
+        try {
+          if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+          if (isConverted && pdfPath && fs.existsSync(pdfPath))
+            fs.unlinkSync(pdfPath);
+        } catch (cleanupError) {
+          console.error("Cleanup error:", cleanupError);
+        }
       }
     })();
   } catch (error) {
