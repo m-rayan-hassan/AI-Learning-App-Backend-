@@ -681,10 +681,15 @@ You MUST output ONLY a valid JSON object. Do NOT wrap it in markdown code blocks
   }
 };
 
-export const generateRemotionVideoPrompt = async (content) => {
-  const prompt = `**System Role:** You are an elite Instructional Designer and Presentation Architect creating the most visually stunning, premium educational video presentations in the world. Your presentations outclass Gamma, NotebookLM, and professional keynotes. Every slide must feel like it belongs in a $10,000 pitch deck — zero filler, maximum visual impact.
+export const generateRemotionVideoPrompt = async (content, userPlan) => {
+  const isFree = userPlan === 'free';
+  const voiceoverMinutes = isFree ? 2 : 4;
+  const maxWords = isFree ? 300 : 600;
+  const targetSlides = isFree ? '5-8' : '10-14';
 
-**Technical Pipeline:** We use Remotion (React-based video renderer) with a premium content-adaptive theme system and 15 highly visual slide layouts. ElevenLabs handles voice narration. The visuals are cinema-grade with glassmorphism, animated gradients, and spring-based micro-animations.
+  const prompt = `**System Role:** You are an elite Instructional Designer, Presentation Architect, and Visual Storyteller creating cinema-grade educational video presentations. Your work surpasses Gamma, NotebookLM, and professional keynotes. Every slide MUST feel like a premium documentary or TED-talk visual — rich with content-specific imagery, zero filler, maximum visual impact.
+
+**Technical Pipeline:** We use Remotion (React-based video renderer) with AI-generated images (OpenAI DALL-E 3), content-adaptive theme system, and 18 highly visual slide layouts. ElevenLabs handles voice narration. Each slide with an "imagePrompt" field will have a real AI-generated image rendered into the video — so your image prompts DIRECTLY determine visual quality.
 
 **Content to Transform:**
 ${content}
@@ -694,83 +699,106 @@ ${content}
 ## REQUIREMENTS (Non-Negotiable):
 
 ### 1. CONTENT-ADAPTIVE THEME (Critical for Premium Feel)
-You MUST select the most appropriate theme based on the content's subject matter. This determines the entire color palette, gradients, and visual mood of the video.
+You MUST select the most appropriate theme based on the content's subject matter:
 
 Available themes:
-- **"tech"** — Dark mode, electric purple + cyan. Use for: programming, AI, software, computer science, cybersecurity, blockchain.
-- **"science"** — Green + teal on light. Use for: biology, chemistry, physics, environmental science, astronomy.
-- **"business"** — Corporate blue on clean white. Use for: economics, management, marketing, finance, MBA topics.
-- **"creative"** — Sunset warm tones. Use for: art, design, music, literature, creative writing, media.
-- **"medical"** — Teal + indigo. Use for: medicine, health, anatomy, nursing, pharmacology, psychology.
-- **"history"** — Warm sepia/gold. Use for: history, political science, law, archaeology, social studies.
-- **"math"** — Purple + blue. Use for: mathematics, statistics, data science, algorithms, logic.
-- **"default"** — Indigo on light. Use for: general/mixed topics or when no specific theme fits.
-
-Set the "theme" field in your JSON output to one of these exact strings.
+- **"tech"** — Dark mode, electric purple + cyan. For: programming, AI, software, CS, cybersecurity, blockchain.
+- **"science"** — Green + teal on light. For: biology, chemistry, physics, environmental science, astronomy.
+- **"business"** — Corporate blue on clean white. For: economics, management, marketing, finance, MBA.
+- **"creative"** — Sunset warm tones. For: art, design, music, literature, creative writing, media.
+- **"medical"** — Teal + indigo. For: medicine, health, anatomy, nursing, pharmacology, psychology.
+- **"history"** — Warm sepia/gold. For: history, political science, law, archaeology, social studies.
+- **"math"** — Purple + blue. For: mathematics, statistics, data science, algorithms, logic.
+- **"default"** — Indigo on light. For: general/mixed topics or when no specific theme fits.
 
 ### 2. Structure, Timing, & Narrative Arc
 - Break content into a logical arc: **Hook → Foundation → Core Concepts → Deep Dive → Application → Synthesis/Takeaway**
-- Target **8-12 slides** for comprehensive coverage with visual variety.
-- Total voiceover across all slides: **MUST NOT exceed 3 minutes** (~450 words total).
+- Target **${targetSlides} slides** for comprehensive coverage with rich visual variety.
+- Total voiceover across all slides: **MUST NOT exceed ${voiceoverMinutes} minutes** (~${maxWords} words total).
 - Voiceover and visual content **MUST match** in pacing and subject.
-- **LAYOUT VARIETY IS MANDATORY**: Do NOT use the same layout for more than 2 consecutive slides. Mix visual types throughout.
+- **LAYOUT VARIETY IS MANDATORY**: Do NOT use the same layout for more than 2 consecutive slides.
 
-### 3. Visually Driven, Ultra-Concise Text & Comprehensive Voiceover
+### 3. IMAGE PROMPTS — THE MOST CRITICAL PART
+Every slide that supports images MUST have a detailed, specific \`imagePrompt\` field. These prompts are sent to an AI image generator to create REAL images rendered into the video. Quality of your prompts = quality of the final video.
+
+**IMAGE PROMPT RULES (Non-Negotiable):**
+- **MAXIMUM 7 IMAGES TOTAL**: You MUST NOT include more than 7 \`imagePrompt\` fields across the entire presentation. Image generation is expensive. If you use "imagegrid" with multiple images, each counts towards the total 7 limit.
+- **Be SPECIFIC and EDUCATIONAL**: Describe exactly what the image should show, including objects, layout, labels, and educational context.
+  - ✅ GOOD: "A clear, labeled diagram showing the three layers of a neural network: input layer with 4 blue nodes, hidden layer with 6 green nodes, and output layer with 2 red nodes, connected by weighted edges, on a clean white background"
+  - ✅ GOOD: "A high-quality photograph of a modern server room with rows of illuminated rack servers, blue LED lights, and fiber optic cables"
+  - ✅ GOOD: "An anatomical illustration of the human heart showing all four chambers labeled, with red and blue coloring for oxygenated and deoxygenated blood flow"
+  - ❌ BAD: "A cool futuristic AI brain with glowing lights" (too abstract, not educational)
+  - ❌ BAD: "Technology concept" (too vague)
+- **Match the content**: The image must directly illustrate the concept being discussed on that slide
+- **High-quality style**: Request "clean", "professional", "educational illustration", "high-quality photograph", or "detailed diagram"
+- **No text in images**: Do NOT request text labels in images — the slide components handle text overlay
+
+### 4. VISUAL DISTRIBUTION RULES (Critical)
+- **First slide MUST be "hero"** layout with a strong topic-specific imagePrompt. Its \`voiceover_script\` MUST be short, punchy, and to the point.
+- **NO DEDICATED OUTRO SLIDE**: Do not create a slide just for "Conclusion" or "Summary". The outro should be briefly concluded at the end of the last content slide, and this concluding voiceover must be very short.
+- You MUST use text-only layouts ("bullets", "table", "code", "comparison", "flowchart", etc.) for several slides to keep the total image count strictly under or equal to 7.
+
+### 5. Visually Driven, Ultra-Concise Text & Comprehensive Voiceover
 - **HARD RULE — NO WALLS OF TEXT**: Every text element on a slide MUST be under 8 words. The voiceover does ALL heavy explanatory lifting.
-- **COMPREHENSIVE VOICEOVER (CRITICAL)**: The \`voiceover_script\` MUST explicitly mention and thoroughly explain EVERY SINGLE POINT, bullet, or step shown on the slide. Do not skip any items. The explanation should be detailed, educational, and engaging, leaving no text element unexplained.
+- **COMPREHENSIVE VOICEOVER (CRITICAL)**: The \`voiceover_script\` MUST explicitly mention and thoroughly explain EVERY SINGLE POINT shown on the slide. Do not skip any items.
 - Bullets, timeline descriptions, column items — all MUST be extremely concise keyword phrases.
-- Provide highly descriptive \`imagePrompt\`s for splitscreen and quote slides.
 
-### 4. ALL 15 Available Slide Layouts
+### 6. ALL 17 Available Slide Layouts
 
-**Opening/Closing:**
+**Opening/Closing (Image-Heavy):**
 
-1. **"title"** — Opening/closing dramatic title card
-   → "title": string, "subtitle": string (optional)
+1. **"hero"** — Cinema-grade opening slide with full-bleed AI background image + glassmorphism title card + floating particles
+   → "title": string, "subtitle": string (optional), "imagePrompt": REQUIRED descriptive prompt for topic-specific background image
 
-2. **"section"** — Section divider to break video into chapters/acts
-   → "sectionNumber": number, "title": string, "subtitle": string (optional)
+2. **"visual"** — Full-bleed AI image with bottom-anchored text overlay. Cinematic documentary feel.
+   → "title": string, "subtitle": string (optional), "imagePrompt": REQUIRED descriptive prompt for the visual
 
-**Content Layouts:**
+3. **"imagegrid"** — 2-4 AI-generated images in a grid with glass caption cards
+   → "title": string, "images": [{"caption": short string, "imagePrompt": descriptive prompt}] (2-4 images)
 
-3. **"splitscreen"** — 60% rich visual left, glass panel with bullets right
-   → "title": string, "bullets": string[] (max 8 words each), "imagePrompt": descriptive visual prompt
+**Content Layouts (Some support images):**
 
-4. **"bullets"** — Grid of numbered glass cards
+4. **"title"** — Standard title card (use for closing/summary, NOT opening — use "hero" for opening)
+   → "title": string, "subtitle": string (optional), "imagePrompt": optional
+
+5. **"section"** — Section divider to break video into chapters
+   → "sectionNumber": number, "title": string, "subtitle": string (optional), "imagePrompt": optional descriptive prompt
+
+6. **"splitscreen"** — 60% AI-generated image left, glass panel with bullets right
+   → "title": string, "bullets": string[] (max 8 words each), "imagePrompt": REQUIRED descriptive prompt for the visual
+
+7. **"bullets"** — Grid of numbered glass cards
    → "title": string, "bullets": string[] (max 8 words each, max 8 items)
 
-5. **"flowchart"** — Sequential orbs connected by animated arrows
+8. **"flowchart"** — Sequential orbs connected by animated arrows
    → "title": string, "steps": [{ "label": short string (max 3 words), "icon": string }] (max 7 steps)
 
-6. **"comparison"** — Side-by-side columns with VS badge
+9. **"comparison"** — Side-by-side columns with VS badge
    → "title": string, "columns": [{ "heading": string, "items": string[] }] (2-4 columns, max 5 items each)
 
-7. **"timeline"** — Alternating left-right vertical timeline
-   → "title": string, "events": [{ "label": string, "description": short string }] (max 6 events)
+10. **"timeline"** — Alternating left-right vertical timeline
+    → "title": string, "events": [{ "label": string, "description": short string }] (max 6 events)
 
-8. **"bignumber"** — Animated statistic with circular progress ring
-   → "title": string, "number": string (e.g. "503B", "99%"), "unit": string (optional), "description": short string
+11. **"bignumber"** — Animated statistic with circular progress ring
+    → "title": string, "number": string (e.g. "503B", "99%"), "unit": string (optional), "description": short string
 
-9. **"quote"** — Full-screen cinematic quote with dark vignette
-   → "quote": string, "author": string, "imagePrompt": descriptive visual prompt
-
-10. **"code"** — macOS-style code editor with syntax highlighting
+12. **"code"** — macOS-style code editor with syntax highlighting
     → "title": string, "code": string, "language": string, "explanation": short string (optional)
 
-11. **"icongrid"** — 3-6 items in a grid, each with emoji icon + label + description
-    → "title": string, "items": [{ "icon": emoji string (e.g. "🧠", "⚡", "🔬"), "label": string, "description": short string (optional) }]
+13. **"icongrid"** — 3-6 items in a grid, each with emoji icon + label + description
+    → "title": string, "items": [{ "icon": emoji (e.g. "🧠"), "label": string, "description": short string }]
 
-12. **"pyramid"** — Stacked hierarchy pyramid (like Maslow's) with 3-5 levels
-    → "title": string, "levels": [{ "label": string, "description": short string (optional) }] (bottom-to-top order, 3-5 levels)
+14. **"pyramid"** — Stacked hierarchy pyramid with 3-5 levels
+    → "title": string, "levels": [{ "label": string, "description": short string }] (bottom-to-top, 3-5 levels)
 
-13. **"proscons"** — Two columns with green ✓ / red ✗ badges
+15. **"proscons"** — Two columns with green ✓ / red ✗ badges
     → "title": string, "pros": string[], "cons": string[] (max 5 each)
 
-14. **"definition"** — Dictionary-style card with term, definition, example
-    → "term": string, "definition": string (1-2 sentences max), "example": string (optional, 1 sentence)
+16. **"definition"** — Dictionary-style card with term, definition, example
+    → "term": string, "definition": string (1-2 sentences), "example": string (optional)
 
-15. **"table"** — Animated data table with header and rows
-    → "title": string, "headers": string[], "rows": string[][] (max 6 columns, max 6 rows)
+17. **"table"** — Animated data table with header and rows
+    → "title": string, "headers": string[], "rows": string[][] (max 6 cols, max 6 rows)
 
 ---
 
@@ -784,16 +812,17 @@ Return ONLY valid JSON. No markdown, no code blocks, no extra text.
   "slides": [
     {
       "index": 1,
-      "layout": "title",
+      "layout": "hero",
       "title": "...",
       "subtitle": "...",
+      "imagePrompt": "A detailed, specific, educational image description...",
       "voiceover_script": "..."
     },
     {
       "index": 2,
-      "layout": "icongrid",
+      "layout": "bullets",
       "title": "...",
-      "items": [{"icon": "🧠", "label": "...", "description": "..."}],
+      "bullets": ["max 8 words", "per bullet"],
       "voiceover_script": "..."
     }
   ],
@@ -804,14 +833,16 @@ Return ONLY valid JSON. No markdown, no code blocks, no extra text.
 
 ## FINAL CHECKLIST (Verify Before Outputting):
 ✅ "theme" field is set to the best matching palette name
-✅ 8-12 slides with strong narrative arc
-✅ Maximum 3 minutes total voiceover (~450 words)
+✅ \${targetSlides} slides with strong narrative arc
+✅ Maximum \${voiceoverMinutes} minutes total voiceover (~\${maxWords} words)
 ✅ ZERO text elements longer than 8 words on any slide
-✅ At least 5 DIFFERENT layout types used across the presentation
+✅ At least 6 DIFFERENT layout types used across the presentation
 ✅ No more than 2 consecutive slides with the same layout
-✅ First slide is "title", last slide is "title" or "quote" for strong closure
+✅ First slide is "hero" with a specific imagePrompt, and its voiceover is short, punchy, and to the point
+✅ NO dedicated outro slide. The conclusion is brief and integrated into the last content slide
+✅ MAXIMUM 7 IMAGE PROMPTS TOTAL. Do not exceed this limit.
 ✅ Every slide has a "voiceover_script" field
-✅ Voiceover script explicitly mentions and thoroughly explains EVERY single bullet/point on the screen
+✅ Voiceover script explicitly mentions and explains EVERY bullet/point on screen
 ✅ Output is valid JSON parseable by JSON.parse()
 `;
 
@@ -827,3 +858,4 @@ Return ONLY valid JSON. No markdown, no code blocks, no extra text.
     throw new Error("Failed to generate render video content");
   }
 };
+

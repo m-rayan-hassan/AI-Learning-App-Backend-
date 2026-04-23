@@ -2,34 +2,60 @@ import React from 'react';
 import { useCurrentFrame, interpolate, spring, useVideoConfig } from 'remotion';
 import { theme, SLIDE_WIDTH, SLIDE_HEIGHT } from '../theme';
 import type { ThemeColors } from '../theme';
+import { DynamicBackground } from '../components/DynamicBackground';
+import { AnimatedImage } from '../components/AnimatedImage';
 
 interface SectionDividerSlideProps {
   sectionNumber: number;
   title: string;
   subtitle?: string;
+  imageUrl?: string;
   themeColors: ThemeColors;
 }
 
-export const SectionDividerSlide: React.FC<SectionDividerSlideProps> = ({ sectionNumber, title, subtitle, themeColors }) => {
+export const SectionDividerSlide: React.FC<SectionDividerSlideProps> = ({
+  sectionNumber,
+  title,
+  subtitle,
+  imageUrl,
+  themeColors,
+}) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Giant number bg
-  const numSpring = spring({ frame, fps, config: { damping: 10, stiffness: 50, mass: 1.5 } });
-  const numScale = interpolate(numSpring, [0, 1], [0.5, 1]);
-  const numOpacity = interpolate(numSpring, [0, 1], [0, 0.08]);
+  // Number animation
+  const numSpring = spring({ frame, fps, config: { damping: 12, stiffness: 50 } });
+  const numScale = interpolate(numSpring, [0, 1], [0, 1]);
+  const numOpacity = interpolate(numSpring, [0, 1], [0, 1]);
 
-  // Content
-  const contentSpring = spring({ frame: frame - 15, fps, config: { damping: 14, stiffness: 80 } });
-  const contentOpacity = interpolate(contentSpring, [0, 1], [0, 1]);
-  const contentY = interpolate(contentSpring, [0, 1], [50, 0]);
+  // Title animation
+  const titleSpring = spring({ frame: frame - 12, fps, config: { damping: 14, stiffness: 70 } });
+  const titleY = interpolate(titleSpring, [0, 1], [40, 0]);
+  const titleOpacity = interpolate(titleSpring, [0, 1], [0, 1]);
 
-  // Accent line
-  const lineSpring = spring({ frame: frame - 25, fps, config: { damping: 14, stiffness: 70 } });
-  const lineWidth = interpolate(lineSpring, [0, 1], [0, 120]);
+  // Subtitle animation
+  const subSpring = spring({ frame: frame - 22, fps, config: { damping: 14, stiffness: 70 } });
+  const subY = interpolate(subSpring, [0, 1], [25, 0]);
+  const subOpacity = interpolate(subSpring, [0, 1], [0, 1]);
 
-  // Subtle background drift
-  const driftX = interpolate(frame, [0, 300], [0, -15], { extrapolateRight: 'clamp' });
+  // Accent line animation
+  const lineSpring = spring({ frame: frame - 8, fps, config: { damping: 18, stiffness: 80 } });
+  const lineWidth = interpolate(lineSpring, [0, 1], [0, 100]);
+
+  const hasImage = !!imageUrl;
+
+  // Number ring colors
+  const ringBg = hasImage
+    ? 'rgba(255,255,255,0.12)'
+    : themeColors.isDark
+    ? 'rgba(255,255,255,0.06)'
+    : `${themeColors.primary}10`;
+  const ringBorder = hasImage
+    ? '3px solid rgba(255,255,255,0.25)'
+    : `3px solid ${themeColors.primary}30`;
+  const numColor = hasImage ? '#ffffff' : themeColors.primary;
+
+  const titleFontSize = title.length > 30 ? theme.fontSize.h1 : theme.fontSize.hero;
 
   return (
     <div
@@ -37,125 +63,120 @@ export const SectionDividerSlide: React.FC<SectionDividerSlideProps> = ({ sectio
         boxSizing: 'border-box',
         width: SLIDE_WIDTH,
         height: SLIDE_HEIGHT,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
         position: 'relative',
         overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
         fontFamily: theme.fonts.heading,
-        background: themeColors.isDark
-          ? `linear-gradient(135deg, ${themeColors.bg} 0%, #1a1a2e 50%, ${themeColors.bg} 100%)`
-          : themeColors.gradientBg,
       }}
     >
-      {/* Giant background number */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: `translate(calc(-50% + ${driftX}px), -50%) scale(${numScale})`,
-          fontSize: 600,
-          fontWeight: 900,
-          color: themeColors.textPrimary,
-          opacity: numOpacity,
-          lineHeight: 1,
-          zIndex: 1,
-          pointerEvents: 'none',
-        }}
-      >
-        {String(sectionNumber).padStart(2, '0')}
-      </div>
-
-      {/* Accent decorative circles */}
-      <div
-        style={{
-          position: 'absolute',
-          width: 400,
-          height: 400,
-          borderRadius: '50%',
-          border: `2px solid ${themeColors.primary}15`,
-          top: -100,
-          right: -100,
-          zIndex: 1,
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          width: 250,
-          height: 250,
-          borderRadius: '50%',
-          border: `2px solid ${themeColors.secondary}15`,
-          bottom: -60,
-          left: -60,
-          zIndex: 1,
-        }}
-      />
+      {/* Background */}
+      {hasImage ? (
+        <AnimatedImage
+          src={imageUrl!}
+          width={SLIDE_WIDTH}
+          height={SLIDE_HEIGHT}
+          kenBurns="in"
+          kenBurnsDrift="down"
+          animateEntrance={false}
+          vignetteOpacity={0.5}
+          overlayGradient="linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.55) 100%)"
+          style={{ position: 'absolute', inset: 0, zIndex: 0 }}
+        />
+      ) : (
+        <DynamicBackground themeColors={themeColors} />
+      )}
 
       {/* Content */}
       <div
         style={{
           position: 'relative',
           zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
           textAlign: 'center',
-          opacity: contentOpacity,
-          transform: `translateY(${contentY}px)`,
         }}
       >
-        {/* Section label */}
-        <span
+        {/* Section number in ring */}
+        <div
           style={{
-            fontSize: theme.fontSize.small,
-            fontWeight: 700,
-            color: themeColors.primary,
-            textTransform: 'uppercase',
-            letterSpacing: 6,
-            display: 'block',
-            marginBottom: theme.spacing.md,
+            width: 100,
+            height: 100,
+            borderRadius: '50%',
+            background: ringBg,
+            backdropFilter: hasImage ? 'blur(8px)' : 'none',
+            WebkitBackdropFilter: hasImage ? 'blur(8px)' : 'none',
+            border: ringBorder,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: theme.spacing.lg,
+            transform: `scale(${numScale})`,
+            opacity: numOpacity,
+            boxShadow: hasImage ? '0 8px 30px rgba(0,0,0,0.2)' : 'none',
           }}
         >
-          Section {sectionNumber}
-        </span>
-
-        {/* Title */}
-        <h1
-          style={{
-            fontSize: title.length > 30 ? theme.fontSize.h1 : theme.fontSize.hero * 1.2,
-            fontWeight: 900,
-            color: themeColors.textPrimary,
-            lineHeight: 1.1,
-            letterSpacing: -3,
-            margin: 0,
-            maxWidth: 900,
-          }}
-        >
-          {title}
-        </h1>
+          <span
+            style={{
+              fontSize: 42,
+              fontWeight: 900,
+              color: numColor,
+              textShadow: hasImage ? '0 2px 10px rgba(0,0,0,0.2)' : 'none',
+            }}
+          >
+            {sectionNumber}
+          </span>
+        </div>
 
         {/* Accent line */}
         <div
           style={{
             width: lineWidth,
-            height: 5,
-            background: themeColors.gradientPrimary,
+            height: 3,
+            background: hasImage
+              ? 'linear-gradient(to right, rgba(255,255,255,0.7), rgba(255,255,255,0.2))'
+              : themeColors.gradientPrimary,
             borderRadius: theme.borderRadius.pill,
-            margin: `${theme.spacing.lg}px auto 0`,
+            marginBottom: theme.spacing.lg,
           }}
         />
 
+        {/* Title */}
+        <h2
+          style={{
+            fontSize: titleFontSize,
+            fontWeight: 800,
+            color: hasImage ? '#ffffff' : themeColors.textPrimary,
+            opacity: titleOpacity,
+            transform: `translateY(${titleY}px)`,
+            lineHeight: 1.1,
+            letterSpacing: -2,
+            margin: 0,
+            marginBottom: subtitle ? theme.spacing.md : 0,
+            maxWidth: 900,
+            textShadow: hasImage ? '0 2px 20px rgba(0,0,0,0.3)' : 'none',
+          }}
+        >
+          {title}
+        </h2>
+
+        {/* Subtitle */}
         {subtitle && (
           <p
             style={{
               fontSize: theme.fontSize.h3,
               fontWeight: 500,
-              color: themeColors.textSecondary,
+              color: hasImage ? 'rgba(255,255,255,0.8)' : themeColors.textSecondary,
+              opacity: subOpacity,
+              transform: `translateY(${subY}px)`,
               margin: 0,
-              marginTop: theme.spacing.lg,
               maxWidth: 700,
               lineHeight: 1.5,
               fontFamily: theme.fonts.body,
+              textShadow: hasImage ? '0 1px 10px rgba(0,0,0,0.2)' : 'none',
             }}
           >
             {subtitle}

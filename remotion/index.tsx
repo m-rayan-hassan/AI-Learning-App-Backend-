@@ -38,6 +38,7 @@ const RemotionRoot: React.FC = () => {
           slides: [],
           audioDurations: [],
           theme: 'default',
+          imageMap: {},
         }}
       />
     </>

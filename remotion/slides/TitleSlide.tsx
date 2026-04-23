@@ -3,14 +3,16 @@ import { useCurrentFrame, interpolate, spring, useVideoConfig } from 'remotion';
 import { theme, SLIDE_WIDTH, SLIDE_HEIGHT } from '../theme';
 import type { ThemeColors } from '../theme';
 import { DynamicBackground } from '../components/DynamicBackground';
+import { AnimatedImage } from '../components/AnimatedImage';
 
 interface TitleSlideProps {
   title: string;
   subtitle?: string;
+  imageUrl?: string;
   themeColors: ThemeColors;
 }
 
-export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle, themeColors }) => {
+export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle, imageUrl, themeColors }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -32,10 +34,16 @@ export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle, themeCo
   const titleLen = title.length;
   const titleFontSize = titleLen > 60 ? theme.fontSize.h1 : titleLen > 35 ? theme.fontSize.hero : theme.fontSize.hero * 1.1;
 
-  const cardBg = themeColors.isDark
+  const hasImage = !!imageUrl;
+
+  const cardBg = hasImage
+    ? 'rgba(0,0,0,0.35)'
+    : themeColors.isDark
     ? 'rgba(255,255,255,0.06)'
     : 'rgba(255,255,255,0.65)';
-  const cardBorder = themeColors.isDark
+  const cardBorder = hasImage
+    ? '1px solid rgba(255,255,255,0.15)'
+    : themeColors.isDark
     ? '1px solid rgba(255,255,255,0.12)'
     : '1px solid rgba(255,255,255,0.8)';
 
@@ -54,7 +62,22 @@ export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle, themeCo
         fontFamily: theme.fonts.heading,
       }}
     >
-      <DynamicBackground themeColors={themeColors} />
+      {/* Background: AI image or gradient */}
+      {hasImage ? (
+        <AnimatedImage
+          src={imageUrl!}
+          width={SLIDE_WIDTH}
+          height={SLIDE_HEIGHT}
+          kenBurns="out"
+          kenBurnsDrift="right"
+          animateEntrance={false}
+          vignetteOpacity={0.45}
+          overlayGradient="linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.15) 30%, rgba(0,0,0,0.45) 70%, rgba(0,0,0,0.65) 100%)"
+          style={{ position: 'absolute', inset: 0, zIndex: 0 }}
+        />
+      ) : (
+        <DynamicBackground themeColors={themeColors} />
+      )}
 
       <div
         style={{
@@ -69,7 +92,7 @@ export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle, themeCo
           width: '85%',
           maxWidth: 1000,
           textAlign: 'center',
-          boxShadow: theme.shadow.elevated,
+          boxShadow: hasImage ? '0 16px 50px rgba(0,0,0,0.3)' : theme.shadow.elevated,
           opacity: cardOpacity,
           transform: `scale(${cardScale}) translateY(${floatY}px)`,
           display: 'flex',
@@ -81,7 +104,9 @@ export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle, themeCo
           style={{
             width: 60,
             height: 4,
-            background: themeColors.gradientPrimary,
+            background: hasImage
+              ? 'linear-gradient(to right, rgba(255,255,255,0.8), rgba(255,255,255,0.3))'
+              : themeColors.gradientPrimary,
             borderRadius: theme.borderRadius.pill,
             marginBottom: theme.spacing.lg,
           }}
@@ -91,13 +116,14 @@ export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle, themeCo
           style={{
             fontSize: titleFontSize,
             fontWeight: 800,
-            color: themeColors.textPrimary,
+            color: hasImage ? '#ffffff' : themeColors.textPrimary,
             opacity: titleOpacity,
             transform: `translateY(${titleY}px)`,
             lineHeight: 1.1,
             letterSpacing: -2,
             margin: 0,
             marginBottom: subtitle ? theme.spacing.md : 0,
+            textShadow: hasImage ? '0 2px 20px rgba(0,0,0,0.3)' : 'none',
           }}
         >
           {title}
@@ -108,13 +134,14 @@ export const TitleSlide: React.FC<TitleSlideProps> = ({ title, subtitle, themeCo
             style={{
               fontSize: theme.fontSize.h3,
               fontWeight: 500,
-              color: themeColors.textSecondary,
+              color: hasImage ? 'rgba(255,255,255,0.85)' : themeColors.textSecondary,
               opacity: subtitleOpacity,
               transform: `translateY(${subtitleY}px)`,
               margin: 0,
               maxWidth: 800,
               lineHeight: 1.5,
               fontFamily: theme.fonts.body,
+              textShadow: hasImage ? '0 1px 10px rgba(0,0,0,0.2)' : 'none',
             }}
           >
             {subtitle}

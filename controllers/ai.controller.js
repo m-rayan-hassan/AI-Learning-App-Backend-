@@ -23,6 +23,7 @@ import { renderVideoRemotion } from "../utils/renderVideoRemotion.js";
 import { getTestSlideData, getTestAudioDurations } from "../utils/aiFunctionalitiesRemotion.js";
 import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
 import { embeddings } from "../utils/aiFunctionalities.js";
+import { generateSlideImages } from "../utils/imageGenerator.js";
 
 
 export const generateFlashcards = async (req, res, next) => {
@@ -1035,7 +1036,7 @@ export const testRemotionVideo = async (req, res, next) => {
 
     // 2. Render video with Remotion (replaces Puppeteer recorder)
     const startTime = Date.now();
-    videoPath = await renderVideoRemotion(testData.slides, fakeAudio, docId, testData.theme || 'default');
+    videoPath = await renderVideoRemotion(testData.slides, fakeAudio, docId, testData.theme || 'default', {});
     const renderTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
     console.log(`🧪 REMOTION TEST — Render complete in ${renderTime}s`);
@@ -1140,19 +1141,25 @@ export const generateRemotionVideo = async (req, res, next) => {
         tempVideoDir = path.join(process.cwd(), "temp_video", docIdStr);
 
         const content = document.extractedText;
+
+        const userPlan = user.planType;
         
         // 1. Generate JSON from LLM
-        const videoContent = await aiFunctionalities.generateRemotionVideoPrompt(content);
+        const videoContent = await aiFunctionalities.generateRemotionVideoPrompt(content, userPlan);
 
         console.log("Video content: ", videoContent);
         
         console.log("Remotion LLM Output slides:", videoContent.slides.length);
 
-        // 2. Generate Audio via ElevenLabs
-        // Note: voiceFunctionalities.generateVideoScript already handles iterating over the slides
-        // and calling ElevenLabs, saving files to temp_audio, and returning an array of paths/durations.
-        // We ensure we pass the newly structured JSON (videoContent.slides array contains .voiceover_script).
-        const audioScript = await voiceFunctionalities.generateVideoScript(videoContent, document._id);
+        // 2. Generate Images + Audio IN PARALLEL (independent tasks)
+        console.log("🔄 Starting parallel image + audio generation...");
+        const [imageMap, audioScript] = await Promise.all([
+          // AI Image Generation (OpenAI DALL-E 3)
+          generateSlideImages(videoContent.slides),
+          // Audio Generation (ElevenLabs TTS)
+          voiceFunctionalities.generateVideoScript(videoContent, document._id),
+        ]);
+        console.log(`✅ Parallel generation complete: ${Object.keys(imageMap).length} images, ${audioScript.length} audio clips`);
 
         // Extract audio durations in the format Remotion expects
         const audioDurations = audioScript.map(ad => ({
@@ -1161,12 +1168,13 @@ export const generateRemotionVideo = async (req, res, next) => {
           filePath: ad.filePath
         }));
 
-        // 3. Render raw offline MP4 with Remotion
+        // 3. Render raw offline MP4 with Remotion (now with images!)
         const silentVideoPath = await renderVideoRemotion(
           videoContent.slides,
           audioDurations,
           docIdStr,
-          videoContent.theme || 'default'
+          videoContent.theme || 'default',
+          imageMap
         );
 
         // 4. Stitch audio logic (FFmpeg)
