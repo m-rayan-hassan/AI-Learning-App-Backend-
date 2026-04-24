@@ -1,6 +1,8 @@
 import Document from "../models/Document.model.js";
 import Flashcard from "../models/Flashcard.model.js";
 import Quiz from "../models/Quiz.model.js";
+import VoiceOverview from "../models/VoiceOverview.model.js";
+import VideoOverview from "../models/VideoOverview.model.js";
 
 export const getDashboard = async (req, res, next) => {
   try {
@@ -13,7 +15,8 @@ export const getDashboard = async (req, res, next) => {
       userId,
       completedAt: { $ne: null },
     });
-
+    const totalVoiceAndPodcastOverviews = await VoiceOverview.countDocuments({ userId });
+    const totalVideoOverviews = await VideoOverview.countDocuments({ userId });
     // Get flashcard statistics
 
     const flashcardSets = await Flashcard.find({ userId });
@@ -24,7 +27,7 @@ export const getDashboard = async (req, res, next) => {
     flashcardSets.forEach((set) => {
       totalFlashcards += set.cards.length;
       reviewedFlashcards += set.cards.filter((c) => c.reviewCount > 0).length;
-      starredFlashcards += set.cards.filter((c) => c.isStarted).length;
+      starredFlashcards += set.cards.filter((c) => c.isStared).length;
     });
 
     // Get quiz statistics
@@ -48,8 +51,6 @@ export const getDashboard = async (req, res, next) => {
       .populate("documentId", "title")
       .select("title score totalQuestions completedAt");
 
-    // study streak - just random. TODO: to track daily activity
-    const studyStreak = Math.floor(Math.random() * 7) + 1; // mock data
 
     res.status(200).json({
       success: true,
@@ -63,7 +64,8 @@ export const getDashboard = async (req, res, next) => {
           totalQuizzes,
           completedQuizzes,
           averageScore,
-          studyStreak,
+          totalVoiceAndPodcastOverviews,
+          totalVideoOverviews
         },
         recentActivity: {
           documents: recentDocuments,
