@@ -5,6 +5,7 @@ import {
   generateFlashcards,
   generateQuiz,
   generateSummary,
+  generateNotes,
   chat,
   explainConcept,
   chatHistory,
@@ -30,6 +31,7 @@ router.use(protect);
 router.post("/generate-flashcards", generateFlashcards);
 router.post("/generate-quiz", generateQuiz);
 router.post("/generate-summary", generateSummary);
+router.post("/generate-notes", generateNotes);
 router.post("/chat", aiLimiter, chat);
 router.post("/explain-concept", explainConcept);
 router.get("/chat-history/:documentId", chatHistory);

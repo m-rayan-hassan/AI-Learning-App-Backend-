@@ -84,14 +84,12 @@ export const generateFlashcards = async (req, res, next) => {
 
     (async () => {
       try {
-        const content = document.extractedText;
+        const content = document.notes || document.extractedText;
 
         const cards = await aiFunctionalities.generateFlashcards(
           content,
           parseInt(count),
         );
-
-        console.log("Cards generated", cards);
 
         flashcardSet.cards = cards.map((card) => ({
           question: card.question,
@@ -183,7 +181,7 @@ export const generateQuiz = async (req, res, next) => {
 
     (async () => {
       try {
-        const content = document.extractedText;
+        const content = document.notes || document.extractedText;
         const questions = await aiFunctionalities.generateQuiz(
           content,
           parseInt(numQuestions),
@@ -237,7 +235,7 @@ export const generateSummary = async (req, res, next) => {
       });
     }
 
-    const content = document.extractedText;
+    const content = document.notes || document.extractedText;
     const summary = await aiFunctionalities.generateSummary(content);
 
     document.summary = summary;
@@ -252,6 +250,51 @@ export const generateSummary = async (req, res, next) => {
         summary,
       },
       message: "Summary generated successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const generateNotes = async (req, res, next) => {
+  try {
+    const { documentId } = req.body;
+    if (!documentId) {
+      return res.status(400).json({
+        success: false,
+        error: "Please provide documentId",
+        statusCode: 400,
+      });
+    }
+
+    const document = await Document.findOne({
+      _id: documentId,
+      userId: req.user._id,
+      status: "ready",
+    });
+
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        error: "Document not found or not ready",
+        statusCode: 404,
+      });
+    }
+
+    const content = document.extractedText;
+    const notes = await aiFunctionalities.generateNotes(content);
+
+    document.notes = notes;
+    await document.save();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        documentId: document._id,
+        title: document.title,
+        notes,
+      },
+      message: "Notes generated successfully",
     });
   } catch (error) {
     next(error);

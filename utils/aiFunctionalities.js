@@ -9,15 +9,114 @@ dotenv.config();
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export const embeddings = new GoogleGenerativeAIEmbeddings({
-    apiKey: process.env.GEMINI_API_KEY,
-    model: "gemini-embedding-001",       
-    taskType: TaskType.RETRIEVAL_DOCUMENT,
+  apiKey: process.env.GEMINI_API_KEY,
+  model: "gemini-embedding-001",
+  taskType: TaskType.RETRIEVAL_DOCUMENT,
 });
 
 export const textSplitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 1000,   // Max characters per chunk
-    chunkOverlap: 200, // Overlap to prevent cutting sentences in half
+  chunkSize: 1000, // Max characters per chunk
+  chunkOverlap: 200, // Overlap to prevent cutting sentences in half
 });
+
+export const generateNotes = async (content) => {
+  const prompt = `**System Role:** You are an Elite Academic Notetaker and Information Architect. Your sole purpose is to transform the provided educational content into a master-level, perfectly structured, and strictly comprehensive set of notes.
+
+**Goal:** Create a loss-less, meticulously organized, and visually stunning notes document that captures 100% of the educational value, facts, definitions, and relationships from the source material. These notes must mimic the highest quality study guides. You MUST strictly cover EVERYTHING from the provided content, not missing any single important point or nuance.
+
+**Structural & Aesthetic Requirements (Non-Negotiable):**
+1. **Title & Brief Overview:** Start with an H1 title containing an appropriate emoji (e.g., "# 📚 [Topic] Overview"). Follow this immediately with a "Brief Overview" paragraph and a "Key Points" bulleted list summarizing the main themes.
+2. **Comprehensive Coverage (Lossless Extraction):** Extract EVERY SINGLE definition, date, name, formula, example, and nuance. Do not summarize away the details. Do not include conversational filler.
+3. **Hierarchical Headings with Emojis:** Use Markdown headings (H2, H3). Include relevant emojis in H2 headings to make them visually engaging (e.g., "## Electric Potential Energy ⚡").
+4. **Bullet Points & Numbering:** Break down concepts, facts, and steps into highly scannable bullet points. Ensure the document is incredibly well-structured.
+5. **Important Terminology & Key Insights:** **Bold** all key terms and formulas. Use dedicated "Key insight:" or "Key Distinction:" callouts for critical takeaways. Use LaTeX formatting ($...$) for formulas in text to ensure they look beautiful and readable.
+6. **Tables for Structured Data:** Whenever the content compares two or more things, or presents structured categorical data, you MUST use a Markdown table. Make them neat and comprehensive.
+7. **Beautiful Diagrams & Processes:**
+   - Whenever explaining a flow, relationship, architecture, or process, you MUST provide very beautiful, well-structured diagrams using Markdown Mermaid.js syntax (e.g., flowchart TD, mindmap, sequenceDiagram). 
+   - **Logical and Spatial Layouts (CRITICAL):** The diagram MUST make physical and logical sense. If modeling something horizontal like an X-axis problem (e.g., charges on a line) or a timeline, use \`flowchart LR\` (Left-to-Right) instead of \`TD\` (Top-Down). Use arrows logically to represent distances (with labels) or forces (with directions). Do not use messy, tangled arrow connections for physical setups.
+   - Ensure the structure and layout of the diagram are visually appealing and logical. Use subgraphs appropriately to group objects and maintain clear positioning.
+   - **Formulas in Diagrams:** Since Mermaid node labels do not natively support LaTeX rendering well, if there are formulas in the diagram, you MUST format them using Unicode mathematical symbols for readability (e.g., use "λ dl", "σ dA", "ρ dV", "dE_x", "∫ x² dx", "θ", "π" instead of spelling out "lambda", "sigma", "rho", "Integral"). This ensures they look mathematically proper while remaining easily parsed by Mermaid.
+   - **CRITICAL:** NEVER use quotation marks (") or special characters inside Mermaid node labels, as it breaks the parser (e.g. use A[Choose Pillbox] instead of A[Choose "Pillbox"]).
+8. **Spacing and Readability:** Add blank lines between sections. Never use a wall of text. The final output must be highly readable and visually spaced out.
+
+**Example Structure:**
+# 📚 [Main Topic] Overview
+
+**Brief Overview**
+[A concise summary of the entire document's contents]
+
+**Key Points**
+- [Point 1]
+- [Point 2]
+
+## [Subtopic Name] [Emoji]
+[Detailed breakdown covering ALL facts, definitions, and relationships strictly from the text]
+
+**Key Distinction:**
+- **[Term 1]:** [Definition]
+- **[Term 2]:** [Definition]
+
+[Include Tables, beautiful Mermaid diagrams with readable plain-text formulas, or block LaTeX formulas ($$...$$) here as needed]
+
+**Key insight:** [A critical takeaway]
+
+**Output Format:**
+Return ONLY the Markdown formatted notes. Do not include any introductory or concluding conversational text.
+
+**Input Content:**
+${content}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+    });
+    return response.text;
+  } catch (error) {
+    console.error("Gemini API error", error);
+    throw new Error("Failed to generate notes");
+  }
+};
+
+export const generateSummary = async (content) => {
+  const prompt = `**System Role:** You are an Elite Academic Synthesizer and Visual Information Designer used by top-tier universities. You create the kind of study summaries that students screenshot and share because they're so perfectly crafted — clear, beautiful, and instantly useful.
+
+**Goal:** Distill the provided content into a visually stunning, ultra-concise, high-impact "Cheat Sheet" summary that lets a student grasp the entire topic in under 2 minutes.
+
+**Style Guidelines (Non-Negotiable):**
+1. **Executive Summary:** Open with a powerful 2-3 sentence "Big Picture" overview that captures the CORE thesis and significance of the content. Make it punchy and memorable. Use comparison tables (markdown) when the content involves contrasting ideas, and liberally use relevant emojis to make it visually engaging and scannable.
+2. **Key Concepts:** Organize the most critical ideas into clearly themed groups using beautifully formatted bullet points. Each bullet should be:
+   - **Bold the key term** followed by a crisp 1-2 sentence explanation
+   - Use sub-bullets for supporting details when needed
+   - Include relevant emojis for visual anchoring
+   - Prioritize information by importance — most critical concepts first
+3. **Brevity is King:** This is a CHEAT SHEET, not an essay. Be ruthlessly concise. Cut every unnecessary word. Use active verbs. No filler, no fluff, no "In this document we learn that...". Get straight to the substance.
+4. **Completeness Within Brevity:** Despite being short, ensure ALL major topics from the content are represented. Don't sacrifice coverage for brevity — sacrifice verbosity instead.
+5. **Visual Hierarchy:** Use markdown formatting strategically — bold for terms, tables for comparisons, emojis for categories. The summary should be instantly scannable.
+
+**OUTPUT FORMAT — STRICT COMPLIANCE REQUIRED:**
+You MUST use exactly this structure. Do NOT add any other sections, headers, or content outside this format. Do NOT add a title or introduction before the Executive Summary.
+
+## Executive Summary
+<2-3 sentence big picture overview with tables if applicable, emojis, and visual formatting>
+
+## Key Concepts
+<Themed, beautifully formatted bullet points covering all major ideas>
+
+**Input Content:**
+${content}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+    });
+    return response.text;
+  } catch (error) {
+    console.error("Gemini API error", error);
+    throw new Error("Failed to generate summary");
+  }
+};
 
 export const getExtractedContent = async (url) => {
   const prompt = `**System Role:** You are an Elite Content Reconstruction AI and Instructional Designer with forensic-level attention to detail. Your singular mission is to perform a COMPLETE, LOSSLESS transcription of the entire document into a semantic, machine-readable format that preserves 100% of the educational value for downstream processing (quizzes, flashcards, voice scripts, video generation, and AI tutoring).
@@ -316,46 +415,6 @@ ${content}`;
     return flashcards.slice(0, count);
   } catch (error) {
     console.error("Gemini API error: ", error);
-    throw new Error("Failed to generate flashcards");
-  }
-};
-
-export const generateSummary = async (content) => {
-  const prompt = `**System Role:** You are an Elite Academic Synthesizer and Visual Information Designer used by top-tier universities. You create the kind of study summaries that students screenshot and share because they're so perfectly crafted — clear, beautiful, and instantly useful.
-
-**Goal:** Distill the provided content into a visually stunning, ultra-concise, high-impact "Cheat Sheet" summary that lets a student grasp the entire topic in under 2 minutes.
-
-**Style Guidelines (Non-Negotiable):**
-1. **Executive Summary:** Open with a powerful 2-3 sentence "Big Picture" overview that captures the CORE thesis and significance of the content. Make it punchy and memorable. Use comparison tables (markdown) when the content involves contrasting ideas, and liberally use relevant emojis to make it visually engaging and scannable.
-2. **Key Concepts:** Organize the most critical ideas into clearly themed groups using beautifully formatted bullet points. Each bullet should be:
-   - **Bold the key term** followed by a crisp 1-2 sentence explanation
-   - Use sub-bullets for supporting details when needed
-   - Include relevant emojis for visual anchoring
-   - Prioritize information by importance — most critical concepts first
-3. **Brevity is King:** This is a CHEAT SHEET, not an essay. Be ruthlessly concise. Cut every unnecessary word. Use active verbs. No filler, no fluff, no "In this document we learn that...". Get straight to the substance.
-4. **Completeness Within Brevity:** Despite being short, ensure ALL major topics from the content are represented. Don't sacrifice coverage for brevity — sacrifice verbosity instead.
-5. **Visual Hierarchy:** Use markdown formatting strategically — bold for terms, tables for comparisons, emojis for categories. The summary should be instantly scannable.
-
-**OUTPUT FORMAT — STRICT COMPLIANCE REQUIRED:**
-You MUST use exactly this structure. Do NOT add any other sections, headers, or content outside this format. Do NOT add a title or introduction before the Executive Summary.
-
-## Executive Summary
-<2-3 sentence big picture overview with tables if applicable, emojis, and visual formatting>
-
-## Key Concepts
-<Themed, beautifully formatted bullet points covering all major ideas>
-
-**Input Content:**
-${content}`;
-
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-    });
-    return response.text;
-  } catch (error) {
-    console.error("Gemini API error", error);
     throw new Error("Failed to generate summary");
   }
 };
@@ -365,8 +424,6 @@ export const chatWithContext = async (
   retrievedContext,
   chatHistoryMessages,
 ) => {
-
-
   const prompt = `**System Role:** You are an Elite Socratic AI Tutor — the best AI learning companion available. You combine the patience of a great teacher, the precision of a subject matter expert, and the engaging style of a top educator. Students prefer you over every other AI learning tool because your explanations are clearer, more visual, and more insightful.
 
 **Core Instructions (Non-Negotiable):**
@@ -682,10 +739,10 @@ You MUST output ONLY a valid JSON object. Do NOT wrap it in markdown code blocks
 };
 
 export const generateRemotionVideoPrompt = async (content, userPlan) => {
-  const isFree = userPlan === 'free';
+  const isFree = userPlan === "free";
   const voiceoverMinutes = isFree ? 2 : 4;
   const maxWords = isFree ? 300 : 600;
-  const targetSlides = isFree ? '5-8' : '10-14';
+  const targetSlides = isFree ? "5-8" : "10-14";
 
   const prompt = `**System Role:** You are an elite Instructional Designer, Presentation Architect, and Visual Storyteller creating cinema-grade educational video presentations. Your work surpasses Gamma, NotebookLM, and professional keynotes. Every slide MUST feel like a premium documentary or TED-talk visual — rich with content-specific imagery, zero filler, maximum visual impact.
 
@@ -833,8 +890,8 @@ Return ONLY valid JSON. No markdown, no code blocks, no extra text.
 
 ## FINAL CHECKLIST (Verify Before Outputting):
 ✅ "theme" field is set to the best matching palette name
-✅ \${targetSlides} slides with strong narrative arc
-✅ Maximum \${voiceoverMinutes} minutes total voiceover (~\${maxWords} words)
+✅ ${targetSlides} slides with strong narrative arc
+✅ Maximum ${voiceoverMinutes} minutes total voiceover (~${maxWords} words)
 ✅ ZERO text elements longer than 8 words on any slide
 ✅ At least 6 DIFFERENT layout types used across the presentation
 ✅ No more than 2 consecutive slides with the same layout
@@ -858,4 +915,3 @@ Return ONLY valid JSON. No markdown, no code blocks, no extra text.
     throw new Error("Failed to generate render video content");
   }
 };
-

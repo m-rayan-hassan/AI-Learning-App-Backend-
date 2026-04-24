@@ -202,9 +202,12 @@ export const uploadDocument = async (req, res) => {
           "4. Document Parsed Successfully. Math and Layout Preserved.",
         );
 
+        const notes = await aiFunctionalities.generateNotesAndSummary(fullMarkdown);
+
         await Document.findByIdAndUpdate(newDocument._id, {
           extractedText: fullMarkdown,
           status: "ready",
+          notes: notes,
         });
 
         const docIdString = String(newDocument._id);

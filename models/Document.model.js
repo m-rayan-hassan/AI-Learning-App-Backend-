@@ -51,6 +51,10 @@ const documentSchema = new mongoose.Schema(
       required: true,
       default: "",
     },
+    notes: {
+      type: String,
+      default: ""
+    },
     uploadDate: {
       type: Date,
       default: Date.now,
