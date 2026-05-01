@@ -20,11 +20,13 @@ import { enqueueRecording } from "../utils/recordingQueue.js";
 import { stitchAudioAndVideo } from "../utils/stitcher.js";
 import { userPlans } from "../utils/planFeaturesAndLimit.js";
 import { renderVideoRemotion } from "../utils/renderVideoRemotion.js";
-import { getTestSlideData, getTestAudioDurations } from "../utils/aiFunctionalitiesRemotion.js";
+import {
+  getTestSlideData,
+  getTestAudioDurations,
+} from "../utils/aiFunctionalitiesRemotion.js";
 import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
 import { embeddings } from "../utils/aiFunctionalities.js";
 import { generateSlideImages } from "../utils/imageGenerator.js";
-
 
 export const generateFlashcards = async (req, res, next) => {
   try {
@@ -65,6 +67,18 @@ export const generateFlashcards = async (req, res, next) => {
         success: false,
         message:
           "Flashcards generation limit reached uplaod. Upgrade to generate",
+        statusCode: 400,
+      });
+    }
+
+    const flashcardCount = await Flashcard.countDocuments({
+      documentId: document._id,
+    });
+
+    if (flashcardCount >= 3) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot generate more than 3 flashcard sets for a document",
         statusCode: 400,
       });
     }
@@ -111,7 +125,10 @@ export const generateFlashcards = async (req, res, next) => {
           flashcardSet.generationStatus = "failed";
           await flashcardSet.save();
         } catch (cleanupErr) {
-          console.error("Failed to mark flashcard generation as failed", cleanupErr);
+          console.error(
+            "Failed to mark flashcard generation as failed",
+            cleanupErr,
+          );
         }
       }
     })();
@@ -158,6 +175,16 @@ export const generateQuiz = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: "Quiz generation limit reached. Upgrade to generate more.",
+        statusCode: 400,
+      });
+    }
+
+    const quizCount = await Quiz.countDocuments({ documentId: document._id });
+
+    if (quizCount >= 3) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot generate more than 3 quizzes for a document",
         statusCode: 400,
       });
     }
@@ -340,17 +367,18 @@ export const chat = async (req, res, next) => {
       });
     }
 
-    const chunkCollection = mongoose.connection.db.collection("document_chunks");
-    
+    const chunkCollection =
+      mongoose.connection.db.collection("document_chunks");
+
     const vectorStore = new MongoDBAtlasVectorSearch(embeddings, {
-        collection: chunkCollection,
-        indexName: "vector_index",
-        textKey: "text",
-        embeddingKey: "embedding",
+      collection: chunkCollection,
+      indexName: "vector_index",
+      textKey: "text",
+      embeddingKey: "embedding",
     });
 
     const searchResults = await vectorStore.similaritySearch(question, 3, {
-        preFilter: { documentId: { $eq: documentId } } // MongoDB query syntax to filter by doc ID
+      preFilter: { documentId: { $eq: documentId } }, // MongoDB query syntax to filter by doc ID
     });
 
     const content = document.extractedText;
@@ -358,11 +386,13 @@ export const chat = async (req, res, next) => {
     let retrievedContext;
 
     if (searchResults.length === 0) {
-        retrievedContext = content;
+      retrievedContext = content;
     } else {
-      retrievedContext = searchResults.map(doc => doc.pageContent).join("\n\n---\n\n");
+      retrievedContext = searchResults
+        .map((doc) => doc.pageContent)
+        .join("\n\n---\n\n");
     }
-    
+
     const answer = await aiFunctionalities.chatWithContext(
       question,
       retrievedContext,
@@ -565,7 +595,10 @@ export const generateVoiceOverview = async (req, res, next) => {
           voiceDoc.generationStatus = "failed";
           await voiceDoc.save();
         } catch (cleanupErr) {
-          console.error("Failed to mark voice generation as failed", cleanupErr);
+          console.error(
+            "Failed to mark voice generation as failed",
+            cleanupErr,
+          );
         }
       } finally {
         if (voiceOverviewFilePath) {
@@ -676,7 +709,10 @@ export const generatePodcast = async (req, res, next) => {
           podcastDoc.generationStatus = "failed";
           await podcastDoc.save();
         } catch (cleanupErr) {
-          console.error("Failed to mark podcast generation as failed", cleanupErr);
+          console.error(
+            "Failed to mark podcast generation as failed",
+            cleanupErr,
+          );
         }
       } finally {
         if (podcastFilePath) {
@@ -817,7 +853,10 @@ export const generateVideo = async (req, res, next) => {
           videoDoc.generationStatus = "failed";
           await videoDoc.save();
         } catch (cleanupErr) {
-          console.error("Failed to mark video generation as failed", cleanupErr);
+          console.error(
+            "Failed to mark video generation as failed",
+            cleanupErr,
+          );
         }
       } finally {
         try {
@@ -1072,14 +1111,22 @@ export const testRemotionVideo = async (req, res, next) => {
     const fakeAudio = getTestAudioDurations(testData.slides);
 
     console.log("🧪 REMOTION TEST — Starting with hardcoded data");
-    console.log(`🧪 REMOTION TEST — ${testData.slides.length} slides, layouts: ${testData.slides.map(s => s.layout).join(', ')}`);
+    console.log(
+      `🧪 REMOTION TEST — ${testData.slides.length} slides, layouts: ${testData.slides.map((s) => s.layout).join(", ")}`,
+    );
 
     const docId = `remotion_test_${Date.now()}`;
     tempVideoDir = path.join(process.cwd(), "temp_video", docId);
 
     // 2. Render video with Remotion (replaces Puppeteer recorder)
     const startTime = Date.now();
-    videoPath = await renderVideoRemotion(testData.slides, fakeAudio, docId, testData.theme || 'default', {});
+    videoPath = await renderVideoRemotion(
+      testData.slides,
+      fakeAudio,
+      docId,
+      testData.theme || "default",
+      {},
+    );
     const renderTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
     console.log(`🧪 REMOTION TEST — Render complete in ${renderTime}s`);
@@ -1097,7 +1144,7 @@ export const testRemotionVideo = async (req, res, next) => {
         videoUrl,
         renderTimeSeconds: parseFloat(renderTime),
         slideCount: testData.slides.length,
-        layouts: testData.slides.map(s => s.layout),
+        layouts: testData.slides.map((s) => s.layout),
       },
     });
   } catch (error) {
@@ -1112,7 +1159,9 @@ export const testRemotionVideo = async (req, res, next) => {
     }
     if (tempVideoDir) {
       try {
-        await fs.rm(tempVideoDir, { recursive: true, force: true }).catch(() => {});
+        await fs
+          .rm(tempVideoDir, { recursive: true, force: true })
+          .catch(() => {});
       } catch (err) {}
     }
   }
@@ -1186,12 +1235,16 @@ export const generateRemotionVideo = async (req, res, next) => {
         const content = document.extractedText;
 
         const userPlan = user.planType;
-        
+
         // 1. Generate JSON from LLM
-        const videoContent = await aiFunctionalities.generateRemotionVideoPrompt(content, userPlan);
+        const videoContent =
+          await aiFunctionalities.generateRemotionVideoPrompt(
+            content,
+            userPlan,
+          );
 
         console.log("Video content: ", videoContent);
-        
+
         console.log("Remotion LLM Output slides:", videoContent.slides.length);
 
         // 2. Generate Images + Audio IN PARALLEL (independent tasks)
@@ -1202,13 +1255,15 @@ export const generateRemotionVideo = async (req, res, next) => {
           // Audio Generation (ElevenLabs TTS)
           voiceFunctionalities.generateVideoScript(videoContent, document._id),
         ]);
-        console.log(`✅ Parallel generation complete: ${Object.keys(imageMap).length} images, ${audioScript.length} audio clips`);
+        console.log(
+          `✅ Parallel generation complete: ${Object.keys(imageMap).length} images, ${audioScript.length} audio clips`,
+        );
 
         // Extract audio durations in the format Remotion expects
-        const audioDurations = audioScript.map(ad => ({
+        const audioDurations = audioScript.map((ad) => ({
           index: ad.index,
           duration: ad.duration,
-          filePath: ad.filePath
+          filePath: ad.filePath,
         }));
 
         // 3. Render raw offline MP4 with Remotion (now with images!)
@@ -1216,19 +1271,22 @@ export const generateRemotionVideo = async (req, res, next) => {
           videoContent.slides,
           audioDurations,
           docIdStr,
-          videoContent.theme || 'default',
-          imageMap
+          videoContent.theme || "default",
+          imageMap,
         );
 
         // 4. Stitch audio logic (FFmpeg)
         finalVideoPath = await stitchAudioAndVideo(
           silentVideoPath,
           audioScript,
-          document._id
+          document._id,
         );
 
         // 5. Upload to Cloudinary
-        const video = await uploadMedia(finalVideoPath, "ai-learning-app/videos");
+        const video = await uploadMedia(
+          finalVideoPath,
+          "ai-learning-app/videos",
+        );
         const videoUrl = video.secure_url;
         console.log("Remotion Video Url:", videoUrl);
 
@@ -1245,19 +1303,29 @@ export const generateRemotionVideo = async (req, res, next) => {
           videoDoc.generationStatus = "failed";
           await videoDoc.save();
         } catch (cleanupErr) {
-          console.error("Failed to mark video generation as failed", cleanupErr);
+          console.error(
+            "Failed to mark video generation as failed",
+            cleanupErr,
+          );
         }
       } finally {
         try {
-          if (finalVideoPath) await fs.unlink(path.resolve(finalVideoPath)).catch(() => {});
+          if (finalVideoPath)
+            await fs.unlink(path.resolve(finalVideoPath)).catch(() => {});
         } catch (err) {}
 
         try {
-          if (tempAudioDir) await fs.rm(tempAudioDir, { recursive: true, force: true }).catch(() => {});
+          if (tempAudioDir)
+            await fs
+              .rm(tempAudioDir, { recursive: true, force: true })
+              .catch(() => {});
         } catch (err) {}
 
         try {
-          if (tempVideoDir) await fs.rm(tempVideoDir, { recursive: true, force: true }).catch(() => {});
+          if (tempVideoDir)
+            await fs
+              .rm(tempVideoDir, { recursive: true, force: true })
+              .catch(() => {});
         } catch (err) {}
       }
     })();

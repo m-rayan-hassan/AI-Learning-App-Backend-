@@ -202,7 +202,8 @@ export const uploadDocument = async (req, res) => {
           "4. Document Parsed Successfully. Math and Layout Preserved.",
         );
 
-        const notes = await aiFunctionalities.generateNotesAndSummary(fullMarkdown);
+        const notes =
+          await aiFunctionalities.generateNotes(fullMarkdown);
 
         await Document.findByIdAndUpdate(newDocument._id, {
           extractedText: fullMarkdown,
@@ -412,30 +413,49 @@ export const deleteDocument = async (req, res, next) => {
       });
     }
 
-    const voicePublicId = await VoiceOverview.findOne({
+    const voiceDoc = await VoiceOverview.findOne({
       documentId: document._id,
       userId: req.user._id,
     }).select("publicId");
 
-    const videoPublicId = await VideoOverview.findOne({
+    const videoDoc = await VideoOverview.findOne({
       documentId: document._id,
       userId: req.user._id,
     }).select("publicId");
 
-    await deleteMedia(document.originalFilePublicId);
-    await deleteMedia(document.pdfFilePublicId);
+    try {
+      if (document.originalFilePublicId)
+        await deleteMedia(document.originalFilePublicId);
+      if (document.pdfFilePublicId) await deleteMedia(document.pdfFilePublicId);
+      if (voiceDoc && voiceDoc.publicId)
+        await deleteVideoFromCloudinary(voiceDoc.publicId);
+      if (videoDoc && videoDoc.publicId)
+        await deleteVideoFromCloudinary(videoDoc.publicId);
+    } catch (mediaError) {
+      console.error(
+        "Cloudinary deletion failed, but proceeding with DB cleanup:",
+        mediaError,
+      );
+    }
 
-    if (voicePublicId) {
-      await deleteVideoFromCloudinary(voicePublicId);
-    }
-    if (videoPublicId) {
-      await deleteVideoFromCloudinary(videoPublicId);
-    }
     await Flashcard.deleteMany({ documentId: document._id });
     await Quiz.deleteMany({ documentId: document._id });
     await ChatHistory.deleteMany({ documentId: document._id });
     await VoiceOverview.deleteOne({ documentId: document._id });
     await VideoOverview.deleteOne({ documentId: document._id });
+
+    try {
+      const chunkCollection = mongoose.connection.db.collection("document_chunks");
+      const docIdStr = String(document._id);
+      await chunkCollection.deleteMany({
+        $or: [
+          { documentId: docIdStr },
+          { "metadata.documentId": docIdStr }
+        ]
+      });
+    } catch (chunkError) {
+      console.error("Failed to delete document chunks:", chunkError);
+    }
 
     await document.deleteOne();
 

@@ -1,11 +1,26 @@
 import User from "../models/User.model.js";
-import { generateAccessToken, generateRefreshToken } from "../utils/generateToken.js";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+} from "../utils/generateToken.js";
 import sendEmail from "../utils/sendEmail.js";
 import bcrypt from "bcryptjs";
 import Joi from "joi";
 import { OAuth2Client } from "google-auth-library";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+import Document from "../models/Document.model.js";
+import Flashcard from "../models/Flashcard.model.js";
+import Quiz from "../models/Quiz.model.js";
+import VoiceOverview from "../models/VoiceOverview.model.js";
+import VideoOverview from "../models/VideoOverview.model.js";
+import ChatHistory from "../models/ChatHistory.model.js";
+import {
+  deleteMedia,
+  deleteVideoFromCloudinary,
+  uploadMedia,
+} from "../config/cloudinary.js";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -108,7 +123,8 @@ export const getProfile = async (req, res) => {
 // @desc    Update User Profile
 export const updateProfile = async (req, res) => {
   try {
-    const { username, profileImage } = req.body;
+    const { username } = req.body;
+  
     const user = await User.findById(req.user._id);
 
     if (!user) {
@@ -116,21 +132,53 @@ export const updateProfile = async (req, res) => {
     }
 
     if (username) user.username = username;
-    if (profileImage) user.profileImage = profileImage;
-
+  
     await user.save();
 
     res.status(200).json({
       _id: user._id,
       username: user.username,
       email: user.email,
-      profileImage: user.profileImage,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
+export const updateProfileImage = async (req, res, next) => {
+    try {
+      if (!req.file || !req.file.path) {
+        return res.status(400).json({
+          success: false,
+          statusCode: 400,
+          message: "Please provide a profile Image"
+        });
+      } 
+  
+      const profileImagePath = req.file.path;
+      const uploadResult = await uploadMedia(profileImagePath);
+      const profileImageUrl = uploadResult.secure_url;
+  
+      const user = await User.findOne({_id: req.user._id});
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+  
+      user.profileImage = profileImageUrl;
+      await user.save();
+  
+      res.status(200).json({
+        success: true,
+        message: "Profile image updated successfully",
+        profileImage: profileImageUrl
+      });
+  
+    } catch (error) {
+      next(error);
+    }
+
+}
 // @desc    Login user
 export const loginUser = async (req, res) => {
   const { error } = loginSchema.validate(req.body);
@@ -338,6 +386,67 @@ export const deleteUser = async (req, res) => {
     const user = await User.findById(req.user._id);
 
     if (user) {
+      // 1. Fetch user media documents
+      const documents = await Document.find({ userId: user._id });
+      const videos = await VideoOverview.find({ userId: user._id });
+      const voices = await VoiceOverview.find({ userId: user._id });
+
+      // 2. Delete media from Cloudinary
+      for (const doc of documents) {
+        try {
+          if (doc.originalFilePublicId)
+            await deleteMedia(doc.originalFilePublicId);
+          if (doc.pdfFilePublicId) await deleteMedia(doc.pdfFilePublicId);
+        } catch (err) {
+          console.error(
+            `Failed to delete media for document ${doc._id}:`,
+            err.message,
+          );
+        }
+      }
+
+      for (const video of videos) {
+        try {
+          if (video.publicId) await deleteVideoFromCloudinary(video.publicId);
+        } catch (err) {
+          console.error(`Failed to delete video ${video._id}:`, err.message);
+        }
+      }
+
+      for (const voice of voices) {
+        try {
+          if (voice.publicId) await deleteVideoFromCloudinary(voice.publicId);
+        } catch (err) {
+          console.error(
+            `Failed to delete voice overview ${voice._id}:`,
+            err.message,
+          );
+        }
+      }
+
+      // 3. Delete documents from database
+      try {
+        const documentIds = documents.map(doc => String(doc._id));
+        if (documentIds.length > 0) {
+          const chunkCollection = mongoose.connection.db.collection("document_chunks");
+          await chunkCollection.deleteMany({
+            $or: [
+              { documentId: { $in: documentIds } },
+              { "metadata.documentId": { $in: documentIds } }
+            ]
+          });
+        }
+      } catch (chunkError) {
+        console.error("Failed to delete user document chunks:", chunkError);
+      }
+
+      await Flashcard.deleteMany({ userId: user._id });
+      await Quiz.deleteMany({ userId: user._id });
+      await VoiceOverview.deleteMany({ userId: user._id });
+      await VideoOverview.deleteMany({ userId: user._id });
+      await Document.deleteMany({ userId: user._id });
+      await ChatHistory.deleteMany({ userId: user._id });
+
       await User.deleteOne({ _id: user._id });
 
       // Clear refresh cookie on account deletion
