@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const defaultResetDate = function () {
   const now = new Date();
-  now.setMonth(now.getMonth() + 1); // Exact 1 month from signup
+  now.setMonth(now.getMonth() + 1);
   return now;
 };
 
@@ -21,12 +21,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: function () {
         return !this.googleId;
-      }, // Required if not logging in via Google
+      }, 
     },
     profileImage: {
       type: String,
-      default:
-        "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png",
+      default: "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png",
     },
     googleId: {
       type: String,
@@ -34,36 +33,44 @@ const userSchema = new mongoose.Schema(
     resetPasswordToken: String,
     resetPasswordExpire: Date,
 
-    // ─── Paddle / Subscription Fields ───
-    paddleCustomerId: { type: String }, // "ctm_01..."
-    paddleSubscriptionId: { type: String }, // "sub_01..." — needed for upgrades & cancels
-
     planType: {
       type: String,
       enum: ["free", "plus", "pro", "premium"],
       default: "free",
     },
-    subscriptionStatus: {
+    lsCustomerId: { 
       type: String,
+      default: null 
+    },
+    lsSubscriptionId: { 
+      type: String,
+      default: null
+    },
+    subscriptionStatus: { 
+      type: String, 
       enum: ["active", "past_due", "canceled", "none"],
-      default: "none",
+      default: "none" 
+    }, 
+    subscriptionVariantId: { 
+      type: String, 
+      default: null 
     },
-    subscriptionStartDate: { type: Date },
-    subscriptionEndDate: { type: Date },
-    paddleNextBilledAt: { type: Date },
-
-    // Tracks pending scheduled changes (e.g. pending cancellation)
-    paddleScheduledChange: {
-      action: { type: String },
-      effectiveAt: { type: String },
+    renewsAt: { 
+      type: Date, 
+      default: null 
+    },
+    endsAt: { type: Date,
+      default: null 
+    },
+    updatePaymentMethodUrl: { 
+      type: String, 
+      default: null 
+    },
+    customerPortalUrl: { 
+      type: String,
+      default: null
     },
 
-    // Last payment info
-    lastPaymentDate: { type: Date },
-    lastPaymentAmount: { type: String },
-    lastPaymentCurrency: { type: String },
-
-    // Usage tracking that resets monthly from signup/upgrade date
     quotas: {
       video: {
         count: { type: Number, default: 0 },

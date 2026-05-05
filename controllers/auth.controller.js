@@ -103,6 +103,31 @@ export const getProfile = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    const now = new Date();
+
+    if (
+      user.planType === "free" &&
+      now >= new Date(user.quotas.document.resetDate)
+    ) {
+
+      const nextReset = new Date();
+      nextReset.setMonth(nextReset.getMonth() + 1);
+
+      // 2. Reset quota and update the reset date to next month
+      user.quotas.document.count = 0;
+      user.quotas.document.resetDate = nextReset;
+      user.quotas.flashcard.count = 0;
+      user.quotas.flashcard.resetDate = nextReset;
+      user.quotas.quiz.count = 0;
+      user.quotas.quiz.resetDate = nextReset;
+      user.quotas.voiceOverview.count = 0;
+      user.quotas.voiceOverview.resetDate = nextReset;
+      user.quotas.video.count = 0;
+      user.quotas.video.resetDate = nextReset;
+
+      await user.save();
+    }
+
     res.status(200).json({
       _id: user._id,
       username: user.username,
@@ -110,8 +135,8 @@ export const getProfile = async (req, res) => {
       profileImage: user.profileImage,
       planType: user.planType,
       subscriptionStatus: user.subscriptionStatus,
-      subscriptionEndDate: user.subscriptionEndDate,
-      paddleScheduledChange: user.paddleScheduledChange,
+      renewsAt: user.renewsAt,
+      customerPortalUrl: user.customerPortalUrl,
       quotas: user.quotas,
       createdAt: user.createdAt,
     });
@@ -124,7 +149,7 @@ export const getProfile = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     const { username } = req.body;
-  
+
     const user = await User.findById(req.user._id);
 
     if (!user) {
@@ -132,7 +157,7 @@ export const updateProfile = async (req, res) => {
     }
 
     if (username) user.username = username;
-  
+
     await user.save();
 
     res.status(200).json({
@@ -146,39 +171,37 @@ export const updateProfile = async (req, res) => {
 };
 
 export const updateProfileImage = async (req, res, next) => {
-    try {
-      if (!req.file || !req.file.path) {
-        return res.status(400).json({
-          success: false,
-          statusCode: 400,
-          message: "Please provide a profile Image"
-        });
-      } 
-  
-      const profileImagePath = req.file.path;
-      const uploadResult = await uploadMedia(profileImagePath);
-      const profileImageUrl = uploadResult.secure_url;
-  
-      const user = await User.findOne({_id: req.user._id});
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-  
-      user.profileImage = profileImageUrl;
-      await user.save();
-  
-      res.status(200).json({
-        success: true,
-        message: "Profile image updated successfully",
-        profileImage: profileImageUrl
+  try {
+    if (!req.file || !req.file.path) {
+      return res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: "Please provide a profile Image",
       });
-  
-    } catch (error) {
-      next(error);
     }
 
-}
+    const profileImagePath = req.file.path;
+    const uploadResult = await uploadMedia(profileImagePath);
+    const profileImageUrl = uploadResult.secure_url;
+
+    const user = await User.findOne({ _id: req.user._id });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    user.profileImage = profileImageUrl;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Profile image updated successfully",
+      profileImage: profileImageUrl,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 // @desc    Login user
 export const loginUser = async (req, res) => {
   const { error } = loginSchema.validate(req.body);
@@ -426,14 +449,15 @@ export const deleteUser = async (req, res) => {
 
       // 3. Delete documents from database
       try {
-        const documentIds = documents.map(doc => String(doc._id));
+        const documentIds = documents.map((doc) => String(doc._id));
         if (documentIds.length > 0) {
-          const chunkCollection = mongoose.connection.db.collection("document_chunks");
+          const chunkCollection =
+            mongoose.connection.db.collection("document_chunks");
           await chunkCollection.deleteMany({
             $or: [
               { documentId: { $in: documentIds } },
-              { "metadata.documentId": { $in: documentIds } }
-            ]
+              { "metadata.documentId": { $in: documentIds } },
+            ],
           });
         }
       } catch (chunkError) {

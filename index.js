@@ -96,7 +96,7 @@ if (process.env.NODE_ENV === "development") {
 }
 
 // Webhook
-app.post("/webhook", express.raw({ type: "application/json" }), paymentWebhook);
+app.use('/webhook/payments', express.raw({ type: 'application/json' }), paymentRouter);
 
 // Body Parser Middleware
 app.use(express.json({ limit: "10kb" })); // Body limit is 10kb
