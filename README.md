@@ -19,7 +19,7 @@ This service handles authentication, document processing, AI generation, flashca
 - Contextual AI chat and concept explanation APIs
 - `Voice Overview`, `Podcast Overview`, and `Video Overview` generation flows
 - Progress dashboard endpoints
-- Paddle subscription and webhook handling
+- Lemon Squeezy subscription and webhook handling
 - MongoDB persistence with Mongoose
 - Security middleware: Helmet, HPP, CORS, and rate limiting
 
@@ -38,7 +38,7 @@ This service handles authentication, document processing, AI generation, flashca
 - Cloudinary
 - Google Gemini
 - ElevenLabs
-- Paddle
+- Lemon Squeezy
 - Puppeteer + FFmpeg utilities
 
 ---
@@ -73,7 +73,7 @@ This backend exposes modules for:
 - `/api/quizzes`
 - `/api/progress`
 - `/api/payments`
-- `/webhook` for Paddle events
+- `/webhook` for Lemon Squeezy events
 
 ---
 
@@ -113,11 +113,9 @@ CLOUDINARY_API_SECRET=your_api_secret
 GEMINI_API_KEY=your_gemini_api_key
 ELEVEN_LABS_API_KEY=your_elevenlabs_api_key
 GAMMA_API_KEY=your_gamma_api_key
-PADDLE_API_KEY=your_paddle_api_key
-PADDLE_WEBHOOK_SECRET=your_paddle_webhook_secret
-PADDLE_PRICE_ID_PLUS=pri_xxx
-PADDLE_PRICE_ID_PRO=pri_xxx
-PADDLE_PRICE_ID_PREMIUM=pri_xxx
+LEMONSQUEEZY_API_KEY=your_lemonsqueezy_api_key
+LEMONSQUEEZY_STORE_ID=your_lemonsqueezy_store_id
+LEMONSQUEEZY_WEBHOOK_SECRET=your_lemonsqueezy_webhook_secret
 MAX_CONCURRENT_RECORDINGS=1
 ```
 

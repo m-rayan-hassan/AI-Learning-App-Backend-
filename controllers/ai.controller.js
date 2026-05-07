@@ -392,7 +392,7 @@ export const chat = async (req, res, next) => {
         .map((doc) => doc.pageContent)
         .join("\n\n---\n\n");
     }
-
+    
     const answer = await aiFunctionalities.chatWithContext(
       question,
       retrievedContext,
