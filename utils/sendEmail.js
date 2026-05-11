@@ -1,22 +1,20 @@
-import nodemailer from 'nodemailer';
+import { Resend } from "resend";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendEmail = async (options) => {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail', // or your SMTP host
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
+  const { data, error } = await resend.emails.send({
+    from: "Cognivio AI <noreply@cognivioai.app>",
     to: options.email,
     subject: options.subject,
     text: options.message,
-  };
+    html: options.html,
 
-  await transporter.sendMail(mailOptions);
+  })
+  return data;
 };
 
 export default sendEmail;

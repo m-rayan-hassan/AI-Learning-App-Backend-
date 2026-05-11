@@ -11,6 +11,8 @@ import {
   refreshAccessToken,
   logoutUser,
   updateProfileImage,
+  sendOtp,
+  verifyOtp,
 } from "../controllers/auth.controller.js";
 import { protect } from "../middlewares/authMiddleware.js";
 import uploadImage from "../utils/imageMulter.js";
@@ -23,6 +25,8 @@ router.post("/login", loginUser);
 router.post("/google", googleLogin);
 router.post("/refresh", refreshAccessToken);
 router.post("/logout", logoutUser);
+router.post("/send-otp", sendOtp);
+router.post("/verify-otp", verifyOtp);
 router.post("/forgotpassword", forgotPassword);
 router.put("/resetpassword/:resetToken", resetPassword);
 router.delete("/delete", protect, deleteUser);

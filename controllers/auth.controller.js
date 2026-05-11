@@ -1,4 +1,6 @@
 import User from "../models/User.model.js";
+import fs from "fs";
+import path from "path";
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -21,6 +23,18 @@ import {
   deleteVideoFromCloudinary,
   uploadMedia,
 } from "../config/cloudinary.js";
+
+// ─── In-Memory OTP Pending Store ─────────────────────────────────────────────
+// Keyed by lowercase email. Entries auto-expire after OTP_EXPIRE_MS.
+const OTP_EXPIRE_MS = 10 * 60 * 1000; // 10 minutes
+const pendingRegistrations = new Map();
+// Periodically clean expired entries to avoid memory leaks
+setInterval(() => {
+  const now = Date.now();
+  for (const [email, entry] of pendingRegistrations.entries()) {
+    if (entry.otpExpire < now) pendingRegistrations.delete(email);
+  }
+}, 5 * 60 * 1000); // every 5 minutes
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -67,7 +81,7 @@ const loginSchema = Joi.object({
   password: Joi.string().required(),
 });
 
-// @desc    Register new user
+// @desc    Register new user (legacy direct-create — kept for internal use)
 export const registerUser = async (req, res) => {
   const { error } = registerSchema.validate(req.body);
   if (error) return res.status(400).json({ message: error.details[0].message });
@@ -94,6 +108,130 @@ export const registerUser = async (req, res) => {
   }
 };
 
+// @desc    Step 1 — Send OTP to email for signup verification
+// @route   POST /api/auth/send-otp
+// @access  Public
+export const sendOtp = async (req, res) => {
+  const { error } = registerSchema.validate(req.body);
+  if (error) return res.status(400).json({ message: error.details[0].message });
+
+  const { username, email, password } = req.body;
+  const lowerEmail = email.toLowerCase();
+
+  try {
+    // Reject if the email is already registered
+    const userExists = await User.findOne({ email: lowerEmail });
+    if (userExists)
+      return res.status(400).json({ message: "An account with this email already exists" });
+
+    // Generate a 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+
+    // Hash the password so we never store plaintext
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Store pending registration
+    pendingRegistrations.set(lowerEmail, {
+      username,
+      hashedPassword,
+      otpHash,
+      otpExpire: Date.now() + OTP_EXPIRE_MS,
+    });
+
+    // Send OTP email
+    const htmlMessage = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 0; margin: 0; background-color: #F8FAFC; }
+        .container { max-width: 600px; margin: 40px auto; background-color: #ffffff; padding: 40px; border-radius: 12px; border: 1px solid #E5E7EB; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .header { text-align: center; margin-bottom: 30px; }
+        .logo-text { font-size: 24px; font-weight: 700; color: #3B82F6; margin: 0; }
+        .content { color: #0b1220; font-size: 16px; line-height: 1.6; }
+        .otp-box { text-align: center; margin: 35px 0; }
+        .otp-code { display: inline-block; font-size: 40px; font-weight: 800; letter-spacing: 10px; color: #3B82F6; background: #EFF6FF; border: 2px solid #BFDBFE; border-radius: 12px; padding: 18px 32px; }
+        .footer { text-align: center; margin-top: 40px; font-size: 14px; color: #64748B; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header"><div class="logo-text">Cognivio AI</div></div>
+        <div class="content">
+          <p>Hello ${username},</p>
+          <p>Thanks for signing up! Use the verification code below to complete your registration.</p>
+          <div class="otp-box"><div class="otp-code">${otp}</div></div>
+          <p style="font-size:14px;color:#64748B;">This code expires in <strong>10 minutes</strong>. If you didn't request this, you can safely ignore this email.</p>
+        </div>
+        <div class="footer"><p>&copy; ${new Date().getFullYear()} Cognivio AI. All rights reserved.</p></div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    await sendEmail({
+      email: lowerEmail,
+      subject: "Your Cognivio AI verification code",
+      message: `Your verification code is: ${otp}. It expires in 10 minutes.`,
+      html: htmlMessage,
+    });
+
+    res.status(200).json({ message: "OTP sent successfully" });
+  } catch (err) {
+    console.error("sendOtp error:", err.message);
+    res.status(500).json({ message: "Failed to send OTP. Please try again." });
+  }
+};
+
+// @desc    Step 2 — Verify OTP and create account
+// @route   POST /api/auth/verify-otp
+// @access  Public
+export const verifyOtp = async (req, res) => {
+  const { email, otp } = req.body;
+  if (!email || !otp)
+    return res.status(400).json({ message: "Email and OTP are required" });
+
+  const lowerEmail = email.toLowerCase();
+  const pending = pendingRegistrations.get(lowerEmail);
+
+  if (!pending)
+    return res.status(400).json({ message: "No pending registration found. Please sign up again." });
+
+  if (Date.now() > pending.otpExpire) {
+    pendingRegistrations.delete(lowerEmail);
+    return res.status(400).json({ message: "OTP has expired. Please sign up again." });
+  }
+
+  const otpHash = crypto.createHash("sha256").update(otp.trim()).digest("hex");
+  if (otpHash !== pending.otpHash)
+    return res.status(400).json({ message: "Invalid OTP. Please try again." });
+
+  try {
+    // Double-check the email wasn't registered while OTP was pending
+    const alreadyExists = await User.findOne({ email: lowerEmail });
+    if (alreadyExists) {
+      pendingRegistrations.delete(lowerEmail);
+      return res.status(400).json({ message: "An account with this email already exists" });
+    }
+
+    const user = await User.create({
+      username: pending.username,
+      email: lowerEmail,
+      password: pending.hashedPassword,
+    });
+
+    pendingRegistrations.delete(lowerEmail);
+    sendTokenResponse(res, user, 201);
+  } catch (err) {
+    console.error("verifyOtp error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // @desc    Get User Profile
 export const getProfile = async (req, res) => {
   try {
@@ -109,7 +247,6 @@ export const getProfile = async (req, res) => {
       user.planType === "free" &&
       now >= new Date(user.quotas.document.resetDate)
     ) {
-
       const nextReset = new Date();
       nextReset.setMonth(nextReset.getMonth() + 1);
 
@@ -181,7 +318,17 @@ export const updateProfileImage = async (req, res, next) => {
     }
 
     const profileImagePath = req.file.path;
-    const uploadResult = await uploadMedia(profileImagePath);
+
+    let uploadResult;
+    try {
+      uploadResult = await uploadMedia(profileImagePath);
+    } finally {
+      // Always delete the local temp file, regardless of upload success/failure
+      fs.unlink(profileImagePath, (err) => {
+        if (err) console.error("Failed to delete temp profile image:", err.message);
+      });
+    }
+
     const profileImageUrl = uploadResult.secure_url;
 
     const user = await User.findOne({ _id: req.user._id });
@@ -357,11 +504,54 @@ export const forgotPassword = async (req, res) => {
     const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
     const message = `You requested a password reset. Please go to this link: \n\n ${resetUrl}`;
 
+    const htmlMessage = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 0; margin: 0; background-color: #F8FAFC; }
+        .container { max-width: 600px; margin: 40px auto; background-color: #ffffff; padding: 40px; border-radius: 12px; border: 1px solid #E5E7EB; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        .header { text-align: center; margin-bottom: 30px; }
+        .logo-text { font-size: 24px; font-weight: 700; color: #3B82F6; text-decoration: none; margin: 0; }
+        .content { color: #0b1220; font-size: 16px; line-height: 1.6; }
+        .button-container { text-align: center; margin: 35px 0; }
+        .button { background-color: #3B82F6; color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block; box-shadow: 0 0 15px -3px rgba(59, 130, 246, 0.4); }
+        .button:hover { background-color: #2563EB; }
+        .footer { text-align: center; margin-top: 40px; font-size: 14px; color: #64748B; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo-text">Cognivio AI</div>
+        </div>
+        <div class="content">
+          <p>Hello,</p>
+          <p>We received a request to reset the password for your Cognivio AI account. If you didn't make this request, you can safely ignore this email.</p>
+          <p>To choose a new password, click the button below:</p>
+          <div class="button-container">
+            <a href="${resetUrl}" class="button" style="color: #ffffff;">Reset Password</a>
+          </div>
+          <p style="font-size: 14px; color: #64748B;">Or copy and paste this link into your browser:</p>
+          <p style="word-break: break-all; font-size: 14px;"><a href="${resetUrl}" style="color: #3B82F6;">${resetUrl}</a></p>
+          <p style="font-size: 14px; color: #64748B;">This link will expire in 10 minutes.</p>
+        </div>
+        <div class="footer">
+          <p>&copy; ${new Date().getFullYear()} Cognivio AI. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
     try {
       await sendEmail({
         email: user.email,
-        subject: "Password Reset Request",
+        subject: "Reset your Cognivio AI password",
         message,
+        html: htmlMessage,
       });
       res.status(200).json({ success: true, data: "Email sent" });
     } catch (err) {
