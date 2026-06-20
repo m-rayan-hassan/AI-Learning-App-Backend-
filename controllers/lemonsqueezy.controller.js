@@ -121,6 +121,7 @@ export const lsWebhook = async (req, res, next) => {
       endsAt: obj.ends_at ? new Date(obj.ends_at) : null,
       updatePaymentMethodUrl: obj.urls?.update_payment_method || null,
       customerPortalUrl: obj.urls?.customer_portal || null,
+      customerPortalUpdateSubscriptionUrl: obj.urls?.customer_portal_update_subscription || null,
     };
 
     console.log("Handling event: ", eventName);
@@ -132,12 +133,25 @@ export const lsWebhook = async (req, res, next) => {
       case "subscription_updated":
       case "subscription_resumed":
       case "subscription_cancelled":
-      case "subscription_expired":
         // Update general sub details.
         // Note: Quota refills are handled in 'subscription_payment_success'
         await User.findByIdAndUpdate(userId, {
           ...baseUpdateData,
           subscriptionStatus: obj.status,
+        });
+        break;
+
+      case "subscription_expired":
+        await User.findByIdAndUpdate(userId, {
+          planType: "free",
+          subscriptionStatus: "none",
+          lsSubscriptionId: null,
+          subscriptionVariantId: null,
+          renewsAt: null,
+          endsAt: null,
+          updatePaymentMethodUrl: null,
+          customerPortalUrl: null,
+          customerPortalUpdateSubscriptionUrl: null,
         });
         break;
 

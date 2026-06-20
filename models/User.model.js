@@ -70,6 +70,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null
     },
+    customerPortalUpdateSubscriptionUrl: {
+      type: String,
+      default: null
+    },
 
     quotas: {
       video: {
